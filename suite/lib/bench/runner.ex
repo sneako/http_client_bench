@@ -94,6 +94,7 @@ defmodule Bench.Runner do
       1..concurrency
       |> Enum.map(fn _ ->
         Task.async(fn ->
+          seed_rand()
           worker_loop(deadline, client_module, state, scenario, metrics)
         end)
       end)
@@ -112,6 +113,8 @@ defmodule Bench.Runner do
       :ok
     else
       start_us = System.monotonic_time(:microsecond)
+
+      scenario = materialize_scenario(scenario)
 
       result =
         try do
@@ -136,5 +139,21 @@ defmodule Bench.Runner do
 
       worker_loop(deadline, client_module, state, scenario, metrics)
     end
+  end
+
+  defp materialize_scenario(%Bench.Scenario{delay_range_ms: {min_ms, max_ms}} = scenario)
+       when is_integer(min_ms) and is_integer(max_ms) and max_ms >= min_ms do
+    ms = min_ms + :rand.uniform(max_ms - min_ms + 1) - 1
+    %{scenario | path: "/delay/#{ms}"}
+  end
+
+  defp materialize_scenario(scenario), do: scenario
+
+  defp seed_rand do
+    :rand.seed(:exsplus, {
+      :erlang.phash2({self(), System.monotonic_time(), System.unique_integer([:positive])}),
+      :erlang.phash2({System.unique_integer([:positive]), self()}),
+      :erlang.phash2({System.monotonic_time(), node()})
+    })
   end
 end

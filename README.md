@@ -99,3 +99,9 @@ The OpenResty server provides deterministic endpoints:
 - `/delay/<ms>` sleeps for `<ms>` milliseconds before responding
 
 These are configured in `infra/server/openresty.conf`.
+
+## Benchmark Scenarios
+
+The suite uses the endpoints above with fixed names. For the delay tests:
+- `delay` uses the fixed value from `BENCH_DELAY_MS` (default 100ms)
+- `delay_var` picks a random delay between 20–200ms per request

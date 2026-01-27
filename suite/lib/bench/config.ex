@@ -88,6 +88,13 @@ defmodule Bench.Config do
         method: :get,
         path: "/delay/#{delay_ms}",
         response_bytes: 0
+      },
+      %Scenario{
+        name: "delay_var",
+        method: :get,
+        path: "/delay/0",
+        response_bytes: 0,
+        delay_range_ms: {20, 200}
       }
     ]
   end
