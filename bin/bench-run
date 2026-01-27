@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+HOSTS_FILE="$ROOT_DIR/bench/infra/hosts.json"
+
+if [[ ! -f "$HOSTS_FILE" ]]; then
+  echo "Hosts file not found: $HOSTS_FILE" >&2
+  echo "Run ./bin/infra-up first." >&2
+  exit 1
+fi
+
+CLIENT_IP=$(jq -r '.client_public_ip' "$HOSTS_FILE")
+SERVER_IP=$(jq -r '.server_public_ip' "$HOSTS_FILE")
+SERVER_PRIVATE_IP=$(jq -r '.server_private_ip' "$HOSTS_FILE")
+SSH_USER=$(jq -r '.ssh_user' "$HOSTS_FILE")
+SSH_KEY_PATH=$(jq -r '.ssh_key_path' "$HOSTS_FILE")
+BENCH_PORT=$(jq -r '.bench_port' "$HOSTS_FILE")
+
+if [[ -z "$CLIENT_IP" || -z "$SERVER_IP" || -z "$SSH_USER" || -z "$SSH_KEY_PATH" ]]; then
+  echo "Hosts file missing required fields." >&2
+  exit 1
+fi
+
+SSH_OPTS=(
+  -i "$SSH_KEY_PATH"
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+)
+
+REMOTE_DIR="/home/${SSH_USER}/finch-bench"
+TS=$(date -u +"%Y-%m-%dT%H%M%SZ")
+LOCAL_RESULTS_DIR="$ROOT_DIR/bench/results/$TS"
+REMOTE_RESULTS_DIR="$REMOTE_DIR/bench/results/$TS"
+
+mkdir -p "$LOCAL_RESULTS_DIR"
+
+RSYNC_FILTERS=(
+  --exclude .git
+  --filter=':- .gitignore'
+)
+
+rsync -az --delete "${RSYNC_FILTERS[@]}" "$ROOT_DIR/" "${SSH_USER}@${CLIENT_IP}:${REMOTE_DIR}/"
+rsync -az --delete "${RSYNC_FILTERS[@]}" "$ROOT_DIR/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
+
+cleanup() {
+  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+    "openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf -s stop" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" <<EOSH
+set -euo pipefail
+REMOTE_DIR="$REMOTE_DIR"
+ulimit -n 1048576 || true
+mkdir -p /tmp/bench-server/html/static
+mkdir -p /tmp/bench-server/logs
+cp -a "$REMOTE_DIR/bench/infra/server/static/." /tmp/bench-server/html/static/
+cp "$REMOTE_DIR/bench/infra/server/openresty.conf" /tmp/bench-server/openresty.conf
+pkill -f openresty || true
+openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf
+EOSH
+
+for _ in {1..30}; do
+  if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
+    "curl -sSf http://${SERVER_PRIVATE_IP}:${BENCH_PORT}/health" >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+
+GIT_SHA=$(git -C "$ROOT_DIR" rev-parse HEAD 2>/dev/null || true)
+
+run_remote_bench() {
+  local label="$1"
+  local source="$2"
+  local ref="$3"
+  local version="$4"
+
+  local env_vars=(
+    "BENCH_SERVER_HOST=${SERVER_PRIVATE_IP}"
+    "BENCH_SERVER_PORT=${BENCH_PORT}"
+    "BENCH_RESULTS_DIR=${REMOTE_RESULTS_DIR}/${label}"
+    "BENCH_GIT_SHA=${GIT_SHA}"
+  )
+
+  [[ -n "${BENCH_CLIENTS:-}" ]] && env_vars+=("BENCH_CLIENTS=${BENCH_CLIENTS}")
+  [[ -n "${BENCH_SCENARIOS:-}" ]] && env_vars+=("BENCH_SCENARIOS=${BENCH_SCENARIOS}")
+  [[ -n "${BENCH_DURATION:-}" ]] && env_vars+=("BENCH_DURATION=${BENCH_DURATION}")
+  [[ -n "${BENCH_WARMUP:-}" ]] && env_vars+=("BENCH_WARMUP=${BENCH_WARMUP}")
+  [[ -n "${BENCH_CONCURRENCY:-}" ]] && env_vars+=("BENCH_CONCURRENCY=${BENCH_CONCURRENCY}")
+  [[ -n "${BENCH_POOL_SIZE:-}" ]] && env_vars+=("BENCH_POOL_SIZE=${BENCH_POOL_SIZE}")
+  [[ -n "${BENCH_POOL_COUNT:-}" ]] && env_vars+=("BENCH_POOL_COUNT=${BENCH_POOL_COUNT}")
+  [[ -n "${BENCH_GUN_CONNS:-}" ]] && env_vars+=("BENCH_GUN_CONNS=${BENCH_GUN_CONNS}")
+  [[ -n "${BENCH_REQUEST_TIMEOUT_MS:-}" ]] && env_vars+=("BENCH_REQUEST_TIMEOUT_MS=${BENCH_REQUEST_TIMEOUT_MS}")
+  [[ -n "${BENCH_DDSKERL_ERROR:-}" ]] && env_vars+=("BENCH_DDSKERL_ERROR=${BENCH_DDSKERL_ERROR}")
+  [[ -n "${BENCH_DDSKERL_BOUND:-}" ]] && env_vars+=("BENCH_DDSKERL_BOUND=${BENCH_DDSKERL_BOUND}")
+  [[ -n "${BENCH_ECHO_BYTES:-}" ]] && env_vars+=("BENCH_ECHO_BYTES=${BENCH_ECHO_BYTES}")
+  [[ -n "${BENCH_DELAY_MS:-}" ]] && env_vars+=("BENCH_DELAY_MS=${BENCH_DELAY_MS}")
+
+  env_vars+=("BENCH_FINCH_SOURCE=${source}")
+  [[ -n "${BENCH_FINCH_GIT:-}" ]] && env_vars+=("BENCH_FINCH_GIT=${BENCH_FINCH_GIT}")
+  [[ -n "${ref}" ]] && env_vars+=("BENCH_FINCH_REF=${ref}")
+  [[ -n "${version}" ]] && env_vars+=("BENCH_FINCH_VERSION=${version}")
+
+  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" <<EOSH
+set -euo pipefail
+export PATH="\$HOME/.local/bin:\$PATH"
+ulimit -n 1048576 || true
+cd "$REMOTE_DIR/bench/suite"
+if [[ -f /etc/profile.d/99-finch-bench.sh ]]; then
+  # shellcheck source=/dev/null
+  source /etc/profile.d/99-finch-bench.sh
+fi
+if ! command -v mise >/dev/null 2>&1; then
+  curl -fsSL https://mise.jdx.dev/install.sh | sh
+fi
+if [[ -f "$REMOTE_DIR/bench/infra/versions.env" ]]; then
+  # shellcheck source=/dev/null
+  source "$REMOTE_DIR/bench/infra/versions.env"
+fi
+ERLANG_VERSION="\${BENCH_ERLANG_VERSION:-\${ERLANG_VERSION:-28.3.1}}"
+ELIXIR_VERSION="\${BENCH_ELIXIR_VERSION:-\${ELIXIR_VERSION:-1.19.5-otp-28}}"
+export KERL_CONFIGURE_OPTIONS="--without-wx --disable-debug --without-odbc --without-javac"
+mise install erlang@\${ERLANG_VERSION} elixir@\${ELIXIR_VERSION}
+if ! mise use -g erlang@\${ERLANG_VERSION} elixir@\${ELIXIR_VERSION}; then
+  mise global erlang@\${ERLANG_VERSION} elixir@\${ELIXIR_VERSION}
+fi
+MIX_CMD="mise x -- mix"
+${env_vars[*]} MIX_ENV=bench \${MIX_CMD} deps.get
+${env_vars[*]} MIX_ENV=bench \${MIX_CMD} compile
+${env_vars[*]} MIX_ENV=bench \${MIX_CMD} bench.run
+EOSH
+}
+
+if [[ -n "${BENCH_FINCH_MATRIX:-}" ]]; then
+  IFS=',' read -r -a entries <<< "$BENCH_FINCH_MATRIX"
+  for entry in "${entries[@]}"; do
+    entry=$(echo "$entry" | xargs)
+    source="${entry%%:*}"
+    ref=""
+    version=""
+
+    if [[ "$entry" == *":"* ]]; then
+      value="${entry#*:}"
+      if [[ "$source" == "hex" ]]; then
+        version="$value"
+      else
+        ref="$value"
+      fi
+    fi
+
+    label=$(echo "${source}-${ref:-${version:-default}}" | tr '/' '_')
+    run_remote_bench "$label" "$source" "$ref" "$version"
+  done
+else
+  source="${BENCH_FINCH_SOURCE:-path}"
+  ref="${BENCH_FINCH_REF:-}"
+  version="${BENCH_FINCH_VERSION:-}"
+  run_remote_bench "default" "$source" "$ref" "$version"
+fi
+
+rsync -az "${SSH_USER}@${CLIENT_IP}:${REMOTE_RESULTS_DIR}/" "$LOCAL_RESULTS_DIR/"
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
+  "uname -a; lscpu; free -m" > "$LOCAL_RESULTS_DIR/system_client.txt" || true
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+  "uname -a; lscpu; free -m" > "$LOCAL_RESULTS_DIR/system_server.txt" || true
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+  "cat /tmp/bench-server/logs/error.log" > "$LOCAL_RESULTS_DIR/server.log" || true
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
+  "cat ${REMOTE_RESULTS_DIR}/default/metadata.csv" > "$LOCAL_RESULTS_DIR/metadata.csv" 2>/dev/null || true
+
+echo "Benchmark results stored in $LOCAL_RESULTS_DIR"

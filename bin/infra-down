@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+INFRA_DIR="$ROOT_DIR/bench/infra/terraform"
+HOSTS_FILE="$ROOT_DIR/bench/infra/hosts.json"
+TFVARS_FILE="$INFRA_DIR/terraform.tfvars"
+
+if [[ ! -d "$INFRA_DIR" ]]; then
+  echo "Terraform directory not found: $INFRA_DIR" >&2
+  exit 1
+fi
+
+pushd "$INFRA_DIR" >/dev/null
+terraform destroy -auto-approve || true
+popd >/dev/null
+
+rm -f "$HOSTS_FILE" "$TFVARS_FILE"
+
+echo "Infrastructure torn down."

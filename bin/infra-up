@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+INFRA_DIR="$ROOT_DIR/bench/infra/terraform"
+VERSIONS_FILE="$ROOT_DIR/bench/infra/versions.env"
+HOSTS_FILE="$ROOT_DIR/bench/infra/hosts.json"
+
+if [[ -f "$VERSIONS_FILE" ]]; then
+  # shellcheck source=/dev/null
+  source "$VERSIONS_FILE"
+fi
+
+ERLANG_VERSION=${BENCH_ERLANG_VERSION:-${ERLANG_VERSION:-28.3.1}}
+ELIXIR_VERSION=${BENCH_ELIXIR_VERSION:-${ELIXIR_VERSION:-1.19.5-otp-28}}
+
+AWS_REGION=${AWS_REGION:-${BENCH_AWS_REGION:-eu-central-1}}
+CLIENT_TYPE=${BENCH_CLIENT_INSTANCE_TYPE:-c7a.2xlarge}
+SERVER_TYPE=${BENCH_SERVER_INSTANCE_TYPE:-c7a.2xlarge}
+ADMIN_CIDR=${BENCH_ADMIN_CIDR:-0.0.0.0/0}
+BENCH_PORT=${BENCH_PORT:-8080}
+AMI_ID=${BENCH_AMI_ID:-}
+
+SSH_KEY_PATH=${BENCH_SSH_KEY_PATH:-}
+if [[ -z "$SSH_KEY_PATH" ]]; then
+  if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+    SSH_KEY_PATH="$HOME/.ssh/id_ed25519"
+  elif [[ -f "$HOME/.ssh/id_rsa" ]]; then
+    SSH_KEY_PATH="$HOME/.ssh/id_rsa"
+  else
+    echo "BENCH_SSH_KEY_PATH is required (path to private key). No default key found." >&2
+    exit 1
+  fi
+fi
+
+SSH_PUBLIC_KEY_PATH=${BENCH_SSH_PUBLIC_KEY_PATH:-"${SSH_KEY_PATH}.pub"}
+if [[ ! -f "$SSH_PUBLIC_KEY_PATH" ]]; then
+  echo "SSH public key not found at $SSH_PUBLIC_KEY_PATH" >&2
+  exit 1
+fi
+
+cat > "$INFRA_DIR/terraform.tfvars" <<EOFVARS
+region             = "${AWS_REGION}"
+client_instance_type = "${CLIENT_TYPE}"
+server_instance_type = "${SERVER_TYPE}"
+ssh_public_key_path  = "${SSH_PUBLIC_KEY_PATH}"
+admin_cidr         = "${ADMIN_CIDR}"
+bench_port         = ${BENCH_PORT}
+erlang_version     = "${ERLANG_VERSION}"
+elixir_version     = "${ELIXIR_VERSION}"
+ami_id             = "${AMI_ID}"
+EOFVARS
+
+pushd "$INFRA_DIR" >/dev/null
+terraform init
+terraform apply -auto-approve
+
+terraform output -json | jq \
+  --arg key "$SSH_KEY_PATH" \
+  --arg region "$AWS_REGION" \
+  'to_entries | map({( .key): .value.value}) | add + {ssh_key_path: $key, region: $region}' \
+  > "$HOSTS_FILE"
+
+popd >/dev/null
+
+echo "Infrastructure ready. Hosts: $HOSTS_FILE"
