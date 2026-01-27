@@ -28,7 +28,7 @@ This repository contains the automated benchmark infrastructure and suite for Fi
 ./bin/infra-down
 ```
 
-Results are written to `bench/results/<timestamp>/` on your local machine.
+Results are written to `results/<timestamp>/` on your local machine.
 
 ## Notes
 
@@ -64,7 +64,7 @@ Infrastructure:
 - `BENCH_SERVER_INSTANCE_TYPE` (default `c7a.2xlarge`)
 - `BENCH_ADMIN_CIDR` (default `0.0.0.0/0`)
 - `BENCH_AMI_ID` (optional): override AMI ID
-- `BENCH_ERLANG_VERSION`, `BENCH_ELIXIR_VERSION` (override `bench/infra/versions.env`)
+- `BENCH_ERLANG_VERSION`, `BENCH_ELIXIR_VERSION` (override `infra/versions.env`)
 
 Benchmark run configuration:
 - `BENCH_CLIENTS` (default `finch,hackney,gun` or `all`)
@@ -98,4 +98,4 @@ The OpenResty server provides deterministic endpoints:
 - `/stream` returns 1048576 bytes in 64 flushed chunks
 - `/delay/<ms>` sleeps for `<ms>` milliseconds before responding
 
-These are configured in `bench/infra/server/openresty.conf`.
+These are configured in `infra/server/openresty.conf`.

@@ -2,9 +2,9 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-INFRA_DIR="$ROOT_DIR/bench/infra/terraform"
-VERSIONS_FILE="$ROOT_DIR/bench/infra/versions.env"
-HOSTS_FILE="$ROOT_DIR/bench/infra/hosts.json"
+INFRA_DIR="$ROOT_DIR/infra/terraform"
+VERSIONS_FILE="$ROOT_DIR/infra/versions.env"
+HOSTS_FILE="$ROOT_DIR/infra/hosts.json"
 
 if [[ -f "$VERSIONS_FILE" ]]; then
   # shellcheck source=/dev/null

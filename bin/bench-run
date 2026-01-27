@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-HOSTS_FILE="$ROOT_DIR/bench/infra/hosts.json"
+HOSTS_FILE="$ROOT_DIR/infra/hosts.json"
 
 if [[ ! -f "$HOSTS_FILE" ]]; then
   echo "Hosts file not found: $HOSTS_FILE" >&2
@@ -30,8 +30,8 @@ SSH_OPTS=(
 
 REMOTE_DIR="/home/${SSH_USER}/finch-bench"
 TS=$(date -u +"%Y-%m-%dT%H%M%SZ")
-LOCAL_RESULTS_DIR="$ROOT_DIR/bench/results/$TS"
-REMOTE_RESULTS_DIR="$REMOTE_DIR/bench/results/$TS"
+LOCAL_RESULTS_DIR="$ROOT_DIR/results/$TS"
+REMOTE_RESULTS_DIR="$REMOTE_DIR/results/$TS"
 
 mkdir -p "$LOCAL_RESULTS_DIR"
 
@@ -55,8 +55,8 @@ REMOTE_DIR="$REMOTE_DIR"
 ulimit -n 1048576 || true
 mkdir -p /tmp/bench-server/html/static
 mkdir -p /tmp/bench-server/logs
-cp -a "$REMOTE_DIR/bench/infra/server/static/." /tmp/bench-server/html/static/
-cp "$REMOTE_DIR/bench/infra/server/openresty.conf" /tmp/bench-server/openresty.conf
+cp -a "$REMOTE_DIR/infra/server/static/." /tmp/bench-server/html/static/
+cp "$REMOTE_DIR/infra/server/openresty.conf" /tmp/bench-server/openresty.conf
 pkill -f openresty || true
 openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf
 EOSH
@@ -107,7 +107,7 @@ run_remote_bench() {
 set -euo pipefail
 export PATH="\$HOME/.local/bin:\$PATH"
 ulimit -n 1048576 || true
-cd "$REMOTE_DIR/bench/suite"
+cd "$REMOTE_DIR/suite"
 if [[ -f /etc/profile.d/99-finch-bench.sh ]]; then
   # shellcheck source=/dev/null
   source /etc/profile.d/99-finch-bench.sh
@@ -115,9 +115,9 @@ fi
 if ! command -v mise >/dev/null 2>&1; then
   curl -fsSL https://mise.jdx.dev/install.sh | sh
 fi
-if [[ -f "$REMOTE_DIR/bench/infra/versions.env" ]]; then
+if [[ -f "$REMOTE_DIR/infra/versions.env" ]]; then
   # shellcheck source=/dev/null
-  source "$REMOTE_DIR/bench/infra/versions.env"
+  source "$REMOTE_DIR/infra/versions.env"
 fi
 ERLANG_VERSION="\${BENCH_ERLANG_VERSION:-\${ERLANG_VERSION:-28.3.1}}"
 ELIXIR_VERSION="\${BENCH_ELIXIR_VERSION:-\${ELIXIR_VERSION:-1.19.5-otp-28}}"

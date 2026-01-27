@@ -1,5 +1,5 @@
 # Benchmark artifacts.
-/bench/results/
+/results/
 
 # Editor artifacts.
 **/*/.expert

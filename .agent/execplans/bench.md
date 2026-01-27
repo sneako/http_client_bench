@@ -6,7 +6,7 @@ PLANS.md is checked in at `.agent/PLANS.md` in this repo. This ExecPlan must be 
 
 ## Purpose / Big Picture
 
-After this change, a developer can run three commands from the repository root to (1) provision a dedicated client VM and server VM in AWS EC2, (2) run a high-load, realistic HTTP benchmark suite that compares Finch against other Elixir/Erlang HTTP clients and against different Finch versions, and (3) tear down the infrastructure. Benchmarks can be run for Finch alone or for all included clients by setting `BENCH_CLIENTS`; the initial included set is Finch, Hackney 2.0, and Gun. Results will be stored locally under `bench/results/<timestamp>/` with machine metadata, scenario definitions, and performance summaries so the user can compare runs over time. The system will be demonstrably working when `./bin/infra-up` provisions two instances, `./bin/bench-run` produces a results folder with benchmark summaries, and `./bin/infra-down` cleanly destroys all AWS resources.
+After this change, a developer can run three commands from the repository root to (1) provision a dedicated client VM and server VM in AWS EC2, (2) run a high-load, realistic HTTP benchmark suite that compares Finch against other Elixir/Erlang HTTP clients and against different Finch versions, and (3) tear down the infrastructure. Benchmarks can be run for Finch alone or for all included clients by setting `BENCH_CLIENTS`; the initial included set is Finch, Hackney 2.0, and Gun. Results will be stored locally under `results/<timestamp>/` with machine metadata, scenario definitions, and performance summaries so the user can compare runs over time. The system will be demonstrably working when `./bin/infra-up` provisions two instances, `./bin/bench-run` produces a results folder with benchmark summaries, and `./bin/infra-down` cleanly destroys all AWS resources.
 
 ## Progress
 
@@ -33,7 +33,7 @@ After this change, a developer can run three commands from the repository root t
   Rationale: A dedicated VPC avoids dependency on a default VPC and makes the infrastructure self-contained and reproducible.
   Date/Author: 2026-01-26 / Codex
 
-- Decision: Implement the benchmark suite as a separate Mix project under `bench/suite` so it can depend on multiple HTTP client libraries without affecting Finch’s main dependencies.
+- Decision: Implement the benchmark suite as a separate Mix project under `suite` so it can depend on multiple HTTP client libraries without affecting Finch’s main dependencies.
   Rationale: Keeps benchmark dependencies isolated and avoids accidental changes to Finch’s public dependency graph.
   Date/Author: 2026-01-26 / Codex
 
@@ -75,7 +75,7 @@ Implemented the Terraform module, OpenResty server configuration, benchmark suit
 
 ## Context and Orientation
 
-Finch is an HTTP client library whose source lives under `lib/`. This plan introduces a new benchmarking suite under `bench/suite`, a standalone OpenResty-based server configuration under `bench/infra/server`, and new infrastructure automation under `bench/infra` and `bin`.
+Finch is an HTTP client library whose source lives under `lib/`. This plan introduces a new benchmarking suite under `suite`, a standalone OpenResty-based server configuration under `infra/server`, and new infrastructure automation under `infra` and `bin`.
 
 Terraform is a declarative tool that describes cloud infrastructure in text files and then creates, updates, or destroys it. EC2 is AWS’s virtual machine service. An AMI is a base machine image from which an EC2 instance is created. A VPC is a private virtual network; a subnet is a range of IP addresses inside a VPC. A security group is a virtual firewall that controls which IPs and ports can reach an instance. These terms are used throughout this plan.
 
@@ -83,43 +83,43 @@ The “client VM” will generate load and run the benchmark runner. The “serv
 
 ## Milestones
 
-Milestone 1 establishes the infrastructure and automation primitives. At the end of this milestone, running `./bin/infra-up` will create two reachable EC2 instances and write a local `bench/infra/hosts.json` with the IPs, SSH user, and ports. `./bin/infra-down` will destroy all created resources. Acceptance is a successful SSH connection to both instances and a passing `curl` from client to server on the benchmark port.
+Milestone 1 establishes the infrastructure and automation primitives. At the end of this milestone, running `./bin/infra-up` will create two reachable EC2 instances and write a local `infra/hosts.json` with the IPs, SSH user, and ports. `./bin/infra-down` will destroy all created resources. Acceptance is a successful SSH connection to both instances and a passing `curl` from client to server on the benchmark port.
 
 Milestone 2 implements server provisioning and endpoint configuration using OpenResty. At the end of this milestone, the server VM will run a standalone HTTP server that serves `/health`, `/small`, `/large`, `/json`, `/echo`, `/stream`, and `/delay/<ms>` with deterministic payload sizes. The `/delay/<ms>` endpoint must sleep for the requested number of milliseconds before responding. Acceptance is a `curl http://<server-ip>:8080/health` returning HTTP 200, `curl http://<server-ip>:8080/large` returning the expected byte size, and `curl http://<server-ip>:8080/delay/100` delaying roughly 100 ms before responding.
 
 Milestone 3 implements the benchmark runner and client adapters. At the end of this milestone, `mix bench.run` will run one or more scenarios against the server, collecting throughput and latency metrics for each client, and writing results to a specified directory as JSON and CSV. Acceptance is a local run with `BENCH_CLIENTS=finch` producing a results directory with only Finch entries, and a run with `BENCH_CLIENTS=all` (or default) producing one entry per included client.
 
-Milestone 4 connects infrastructure and runner automation. At the end of this milestone, `./bin/bench-run` will sync the current repo to both EC2 instances, start the server, run the benchmark on the client, collect results back to `bench/results/<timestamp>/`, and stop the server. Acceptance is a completed end-to-end run on EC2 with results stored locally and `infra-down` successfully tearing down resources afterward.
+Milestone 4 connects infrastructure and runner automation. At the end of this milestone, `./bin/bench-run` will sync the current repo to both EC2 instances, start the server, run the benchmark on the client, collect results back to `results/<timestamp>/`, and stop the server. Acceptance is a completed end-to-end run on EC2 with results stored locally and `infra-down` successfully tearing down resources afterward.
 
 ## Plan of Work
 
-Create a new Terraform module under `bench/infra/terraform`. Add `versions.tf` to pin Terraform and the AWS provider. Add `variables.tf` for region, instance types, key path, admin CIDR, and benchmark ports. Add `main.tf` to define a VPC, public subnet, internet gateway, route table, security groups, key pair, and two EC2 instances. Add `outputs.tf` to emit client and server public IPs, server private IP, and SSH user. Add `user_data_client.sh` and `user_data_server.sh` to install base packages, apply OS tuning (including `fs.file-max`, `fs.nr_open`, and nofile limits), and create working directories. The client VM bootstrap installs mise plus the Erlang/Elixir versions listed in `bench/infra/versions.env`. The server VM bootstrap installs OpenResty and leaves it stopped so the bench script can start it with a repo-provided configuration. The user-facing `bin/infra-up` script will generate a `terraform.tfvars` from environment variables, run `terraform init` and `terraform apply`, and write `bench/infra/hosts.json` from `terraform output -json`.
+Create a new Terraform module under `infra/terraform`. Add `versions.tf` to pin Terraform and the AWS provider. Add `variables.tf` for region, instance types, key path, admin CIDR, and benchmark ports. Add `main.tf` to define a VPC, public subnet, internet gateway, route table, security groups, key pair, and two EC2 instances. Add `outputs.tf` to emit client and server public IPs, server private IP, and SSH user. Add `user_data_client.sh` and `user_data_server.sh` to install base packages, apply OS tuning (including `fs.file-max`, `fs.nr_open`, and nofile limits), and create working directories. The client VM bootstrap installs mise plus the Erlang/Elixir versions listed in `infra/versions.env`. The server VM bootstrap installs OpenResty and leaves it stopped so the bench script can start it with a repo-provided configuration. The user-facing `bin/infra-up` script will generate a `terraform.tfvars` from environment variables, run `terraform init` and `terraform apply`, and write `infra/hosts.json` from `terraform output -json`.
 
-Create a new Mix project at `bench/suite`. Add `bench/suite/mix.exs` with dependencies on Finch (path/git/hex selectable), Hackney (2.0 series), Gun, Jason, and ddskerl (use ddskerl_counters) for percentile latencies. Add `bench/suite/.formatter.exs` and `bench/suite/config/config.exs` with baseline settings. Implement a `Bench.Config` module that loads settings from environment variables and an optional config file path, including a `BENCH_CLIENTS` selector that accepts `finch`, `hackney`, `gun`, or `all` (defaulting to all). Implement `Bench.Scenario` as a struct describing method, path, and body, with scenarios that target the OpenResty endpoints including `/delay/<ms>`.
+Create a new Mix project at `suite`. Add `suite/mix.exs` with dependencies on Finch (path/git/hex selectable), Hackney (2.0 series), Gun, Jason, and ddskerl (use ddskerl_counters) for percentile latencies. Add `suite/.formatter.exs` and `suite/config/config.exs` with baseline settings. Implement a `Bench.Config` module that loads settings from environment variables and an optional config file path, including a `BENCH_CLIENTS` selector that accepts `finch`, `hackney`, `gun`, or `all` (defaulting to all). Implement `Bench.Scenario` as a struct describing method, path, and body, with scenarios that target the OpenResty endpoints including `/delay/<ms>`.
 
-Add a new server configuration directory at `bench/infra/server`. Include an OpenResty configuration file (for example `bench/infra/server/openresty.conf`) and any static payload files (for example `bench/infra/server/static/small.bin`, `large.bin`, and `json.json`). The OpenResty config should define the endpoints `/health`, `/small`, `/large`, `/json`, `/echo`, `/stream`, and `/delay/<ms>`; `/delay/<ms>` must sleep for the requested milliseconds using Lua (`ngx.sleep(ms/1000)`), and `/stream` should emit chunked responses with `ngx.flush(true)` between chunks. The config should be written so it can be launched with `openresty -p /tmp/bench-server -c /path/to/openresty.conf` without requiring root-owned paths.
+Add a new server configuration directory at `infra/server`. Include an OpenResty configuration file (for example `infra/server/openresty.conf`) and any static payload files (for example `infra/server/static/small.bin`, `large.bin`, and `json.json`). The OpenResty config should define the endpoints `/health`, `/small`, `/large`, `/json`, `/echo`, `/stream`, and `/delay/<ms>`; `/delay/<ms>` must sleep for the requested milliseconds using Lua (`ngx.sleep(ms/1000)`), and `/stream` should emit chunked responses with `ngx.flush(true)` between chunks. The config should be written so it can be launched with `openresty -p /tmp/bench-server -c /path/to/openresty.conf` without requiring root-owned paths.
 
-Implement `Bench.Client` as a behaviour and write adapters under `bench/suite/lib/bench/clients/` for Finch, Hackney, and Gun. Add a `Bench.ClientRegistry` module that maps stable client ids (`:finch`, `:hackney`, `:gun`) to adapter modules so new clients can be added by implementing the behaviour and adding a single registry entry. Each adapter should support persistent connections and configurable pooling where the underlying client supports it. Implement a `Bench.Runner` that spawns a fixed number of worker processes, runs a warmup phase, runs for a fixed duration, captures per-request latency and error counts, and writes a result record per client and per scenario. Implement `Bench.Metrics` to aggregate stats using ddskerl_counters so p50, p90, p99, min, max, and mean are reported. Implement a `Bench.ResultWriter` to emit `summary.csv` and `metadata.csv` including scenario config, client versions, Finch source, and machine information.
+Implement `Bench.Client` as a behaviour and write adapters under `suite/lib/bench/clients/` for Finch, Hackney, and Gun. Add a `Bench.ClientRegistry` module that maps stable client ids (`:finch`, `:hackney`, `:gun`) to adapter modules so new clients can be added by implementing the behaviour and adding a single registry entry. Each adapter should support persistent connections and configurable pooling where the underlying client supports it. Implement a `Bench.Runner` that spawns a fixed number of worker processes, runs a warmup phase, runs for a fixed duration, captures per-request latency and error counts, and writes a result record per client and per scenario. Implement `Bench.Metrics` to aggregate stats using ddskerl_counters so p50, p90, p99, min, max, and mean are reported. Implement a `Bench.ResultWriter` to emit `summary.csv` and `metadata.csv` including scenario config, client versions, Finch source, and machine information.
 
-Add `bench/suite/lib/mix/tasks/bench.run.ex` so a user can run the benchmarks with `mix bench.run`. Add minimal ExUnit tests under `bench/suite/test` for config parsing and metrics aggregation to satisfy validation requirements without adding heavy test burden.
+Add `suite/lib/mix/tasks/bench.run.ex` so a user can run the benchmarks with `mix bench.run`. Add minimal ExUnit tests under `suite/test` for config parsing and metrics aggregation to satisfy validation requirements without adding heavy test burden.
 
-Create automation scripts under `bin`. `bin/infra-up` provisions infra and bootstraps both machines by installing mise, Erlang, Elixir on the client VM, required packages, and OpenResty on the server VM, then writes `bench/infra/hosts.json`. `bin/bench-run` uses `rsync` to copy the local repo to both VMs (excluding `_build`, `deps`, `tmp`, and `bench/results`), configures and starts the standalone server on the server VM using the OpenResty config in `bench/infra/server`, waits for `/health`, runs the benchmark on the client VM with the requested client list and Finch version(s), collects results to `bench/results/<timestamp>/`, and stops the server. `bin/infra-down` runs `terraform destroy` using the same variables, and cleans up any generated `terraform.tfvars` and `hosts.json` files locally.
+Create automation scripts under `bin`. `bin/infra-up` provisions infra and bootstraps both machines by installing mise, Erlang, Elixir on the client VM, required packages, and OpenResty on the server VM, then writes `infra/hosts.json`. `bin/bench-run` uses `rsync` to copy the local repo to both VMs (excluding `_build`, `deps`, `tmp`, and `results`), configures and starts the standalone server on the server VM using the OpenResty config in `infra/server`, waits for `/health`, runs the benchmark on the client VM with the requested client list and Finch version(s), collects results to `results/<timestamp>/`, and stops the server. `bin/infra-down` runs `terraform destroy` using the same variables, and cleans up any generated `terraform.tfvars` and `hosts.json` files locally.
 
 Add `README.md` describing the three commands, expected prerequisites, environment variables, and how to interpret the results. Ensure all added scripts are executable and use `bash` with `set -euo pipefail`.
 
 ## Concrete Steps
 
-From the repo root, create the new directories `bench/infra/terraform`, `bench/suite`, and `bin`. Add the Terraform files and user data scripts, then add the bench suite Mix project files and modules. After code changes, run formatting in `bench/suite` and ensure scripts have execute bits.
+From the repo root, create the new directories `infra/terraform`, `suite`, and `bin`. Add the Terraform files and user data scripts, then add the bench suite Mix project files and modules. After code changes, run formatting in `suite` and ensure scripts have execute bits.
 
 When validating infrastructure locally, run the following from `/Users/nico/Code/github.com/sneako/finch`:
 
     ./bin/infra-up
 
-Expected output includes a short summary and a populated `bench/infra/hosts.json` file with `client_public_ip` and `server_public_ip`.
+Expected output includes a short summary and a populated `infra/hosts.json` file with `client_public_ip` and `server_public_ip`.
 
 When validating the server locally, start OpenResty with the benchmark configuration (for example, from the repo root):
 
-    openresty -p /tmp/bench-server -c /Users/nico/Code/github.com/sneako/finch/bench/infra/server/openresty.conf
+    openresty -p /tmp/bench-server -c /Users/nico/Code/github.com/sneako/http_client_bench/infra/server/openresty.conf
 
 Then run:
 
@@ -142,7 +142,7 @@ When validating the end-to-end AWS run, run:
 
     ./bin/bench-run
 
-Expected output includes the remote run start, a local results path, and a final summary line pointing to `bench/results/<timestamp>/summary.csv`.
+Expected output includes the remote run start, a local results path, and a final summary line pointing to `results/<timestamp>/summary.csv`.
 
 Finally, clean up with:
 
@@ -154,7 +154,7 @@ Expected output shows Terraform destroying both EC2 instances and the VPC resour
 
 Acceptance requires a full AWS run and a local smoke test.
 
-For local validation, run `MIX_ENV=bench mix test` inside `bench/suite` and expect all tests to pass. Then run the local OpenResty server and the benchmark runner to confirm a local results directory is created with `summary.csv` and `metadata.csv`.
+For local validation, run `MIX_ENV=bench mix test` inside `suite` and expect all tests to pass. Then run the local OpenResty server and the benchmark runner to confirm a local results directory is created with `summary.csv` and `metadata.csv`.
 
 For AWS validation, run `./bin/infra-up`, then `./bin/bench-run`, then `./bin/infra-down`. The benchmark run should produce at least one client result per scenario, with non-zero request counts and a p99 latency value. The server log should show at least one request for each scenario, and the client log should show zero or low error rate. Run at least one Finch-only pass (`BENCH_CLIENTS=finch`) and one all-clients pass (default or `BENCH_CLIENTS=all`). Acceptance is observed when these artifacts exist and contain plausible data.
 
@@ -162,7 +162,7 @@ For AWS validation, run `./bin/infra-up`, then `./bin/bench-run`, then `./bin/in
 
 `./bin/infra-up` must be safe to run multiple times; it should reuse existing Terraform state and only apply changes if necessary. If provisioning fails, rerun the same command after fixing the underlying issue; Terraform will converge on the desired state.
 
-`./bin/bench-run` should be safe to rerun; it should create a new timestamped results directory each time and must stop the server even if the benchmark fails. If the server fails to start, the script should surface logs from `bench/results/<timestamp>/server.log` and exit non-zero.
+`./bin/bench-run` should be safe to rerun; it should create a new timestamped results directory each time and must stop the server even if the benchmark fails. If the server fails to start, the script should surface logs from `results/<timestamp>/server.log` and exit non-zero.
 
 `./bin/infra-down` should be safe to run multiple times. If it fails, rerun until it completes; it should not require manual AWS cleanup in normal cases.
 
@@ -170,7 +170,7 @@ For AWS validation, run `./bin/infra-up`, then `./bin/bench-run`, then `./bin/in
 
 The canonical results folder structure is:
 
-    bench/results/2026-01-26T120000Z/
+    results/2026-01-26T120000Z/
       summary.csv
       metadata.csv
       client.log
@@ -184,17 +184,17 @@ Example `summary.csv` columns should include `scenario`, `client`, `rps`, `laten
 
 The three user-facing scripts are required and must live at the following paths with the following behavior:
 
-- `bin/infra-up` provisions infrastructure and writes `bench/infra/hosts.json`. It accepts configuration via environment variables such as `AWS_PROFILE`, `AWS_REGION`, `BENCH_CLIENT_INSTANCE_TYPE`, `BENCH_SERVER_INSTANCE_TYPE`, `BENCH_SSH_KEY_PATH`, `BENCH_ADMIN_CIDR`, and `BENCH_RESULTS_BUCKET`. It must print the client and server IPs on success.
+- `bin/infra-up` provisions infrastructure and writes `infra/hosts.json`. It accepts configuration via environment variables such as `AWS_PROFILE`, `AWS_REGION`, `BENCH_CLIENT_INSTANCE_TYPE`, `BENCH_SERVER_INSTANCE_TYPE`, `BENCH_SSH_KEY_PATH`, `BENCH_ADMIN_CIDR`, and `BENCH_RESULTS_BUCKET`. It must print the client and server IPs on success.
 
-- `bin/bench-run` reads `bench/infra/hosts.json`, syncs the repo to the VMs, starts the server, runs the benchmark, and copies results to `bench/results/<timestamp>/`. It accepts `BENCH_CLIENTS` (comma-separated list of client ids, or `all`; default `finch,hackney,gun`), `BENCH_SCENARIOS`, `BENCH_DURATION`, `BENCH_CONCURRENCY`, `BENCH_FINCH_SOURCE`, `BENCH_FINCH_REF`, and `BENCH_FINCH_MATRIX` to run multiple Finch versions sequentially.
+- `bin/bench-run` reads `infra/hosts.json`, syncs the repo to the VMs, starts the server, runs the benchmark, and copies results to `results/<timestamp>/`. It accepts `BENCH_CLIENTS` (comma-separated list of client ids, or `all`; default `finch,hackney,gun`), `BENCH_SCENARIOS`, `BENCH_DURATION`, `BENCH_CONCURRENCY`, `BENCH_FINCH_SOURCE`, `BENCH_FINCH_REF`, and `BENCH_FINCH_MATRIX` to run multiple Finch versions sequentially.
 
 - `bin/infra-down` destroys infrastructure using the same Terraform state and variables used by `infra-up`.
 
-The standalone server configuration lives under `bench/infra/server`. The OpenResty config must implement the following fixed behaviors so benchmarks are comparable across runs: `/health` returns status 200 with body `OK`; `/small` returns exactly 4096 bytes; `/large` returns exactly 1048576 bytes; `/json` returns a deterministic JSON object from a static file; `/echo` returns the request body as-is; `/stream` returns exactly 1048576 bytes in 64 chunks flushed with `ngx.flush(true)`; `/delay/<ms>` sleeps for the requested number of milliseconds and then returns status 200 with a small body (for example `delayed <ms>`). These sizes must be documented in the config and re-used by the benchmark scenarios.
+The standalone server configuration lives under `infra/server`. The OpenResty config must implement the following fixed behaviors so benchmarks are comparable across runs: `/health` returns status 200 with body `OK`; `/small` returns exactly 4096 bytes; `/large` returns exactly 1048576 bytes; `/json` returns a deterministic JSON object from a static file; `/echo` returns the request body as-is; `/stream` returns exactly 1048576 bytes in 64 chunks flushed with `ngx.flush(true)`; `/delay/<ms>` sleeps for the requested number of milliseconds and then returns status 200 with a small body (for example `delayed <ms>`). These sizes must be documented in the config and re-used by the benchmark scenarios.
 
 The benchmark suite must define the following interfaces:
 
-In `bench/suite/lib/bench/client.ex`, define a behaviour:
+In `suite/lib/bench/client.ex`, define a behaviour:
 
     defmodule Bench.Client do
       @callback id() :: atom()
@@ -203,13 +203,13 @@ In `bench/suite/lib/bench/client.ex`, define a behaviour:
       @callback teardown(state) :: :ok
     end
 
-In `bench/suite/lib/bench/runner.ex`, define:
+In `suite/lib/bench/runner.ex`, define:
 
     defmodule Bench.Runner do
       @spec run(Bench.Config.t()) :: {:ok, Bench.Result.t()} | {:error, term()}
     end
 
-In `bench/suite/lib/bench/scenario.ex`, define:
+In `suite/lib/bench/scenario.ex`, define:
 
     defmodule Bench.Scenario do
       defstruct name: nil,
@@ -225,7 +225,7 @@ In `bench/suite/lib/bench/scenario.ex`, define:
 
 The `Bench.Result` struct must include the client id, scenario name, request count, error count, elapsed time, and percentile latency fields. `Bench.ResultWriter` must emit `summary.csv` and `metadata.csv` to a directory specified by the config.
 
-In `bench/suite/lib/bench/client_registry.ex`, define:
+In `suite/lib/bench/client_registry.ex`, define:
 
     defmodule Bench.ClientRegistry do
       @spec all_ids() :: [atom()]
@@ -234,7 +234,7 @@ In `bench/suite/lib/bench/client_registry.ex`, define:
 
 The registry should expose all available client ids and provide a resolver for the selected client list. Adding a new client should only require implementing `Bench.Client` in a new module and adding it to this registry.
 
-Dependencies required on the local machine are `terraform`, `ssh`, `rsync`, and `jq`; OpenResty is required only if you want to run the server locally for validation. Dependencies required on the VMs are `git`, `curl`, `build-essential`, OpenResty on the server VM, and the Erlang/Elixir versions specified in `bench/infra/versions.env`, installed via mise on the client VM.
+Dependencies required on the local machine are `terraform`, `ssh`, `rsync`, and `jq`; OpenResty is required only if you want to run the server locally for validation. Dependencies required on the VMs are `git`, `curl`, `build-essential`, OpenResty on the server VM, and the Erlang/Elixir versions specified in `infra/versions.env`, installed via mise on the client VM.
 
 ## Change Note
 
