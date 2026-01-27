@@ -92,6 +92,7 @@ The OpenResty server provides deterministic endpoints:
 
 - `/health` returns `OK`
 - `/small` returns 4096 bytes
+- `/medium` returns 131072 bytes (128 KiB)
 - `/large` returns 1048576 bytes
 - `/json` returns a static JSON payload
 - `/echo` returns the request body

@@ -73,6 +73,7 @@ defmodule Bench.Config do
     [
       %Scenario{name: "health", method: :get, path: "/health", response_bytes: 2},
       %Scenario{name: "small", method: :get, path: "/small", response_bytes: 4096},
+      %Scenario{name: "medium", method: :get, path: "/medium", response_bytes: 131_072},
       %Scenario{name: "large", method: :get, path: "/large", response_bytes: 1_048_576},
       %Scenario{name: "json", method: :get, path: "/json", response_bytes: 0},
       %Scenario{
