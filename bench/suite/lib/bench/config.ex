@@ -31,7 +31,7 @@ defmodule Bench.Config do
       warmup_s: env_int("BENCH_WARMUP", 5),
       concurrency: env_int("BENCH_CONCURRENCY", 100),
       pool_size: env_int("BENCH_POOL_SIZE", 50),
-      pool_count: env_int("BENCH_POOL_COUNT", 1),
+      pool_count: env_int("BENCH_POOL_COUNT", default_pool_count()),
       gun_conns: env_int("BENCH_GUN_CONNS", 4),
       request_timeout_ms: env_int("BENCH_REQUEST_TIMEOUT_MS", 30_000),
       ddskerl_error: env_float("BENCH_DDSKERL_ERROR", 0.01),
@@ -157,5 +157,18 @@ defmodule Bench.Config do
   defp default_results_dir do
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y-%m-%dT%H%M%SZ")
     Path.expand("../results/#{timestamp}", File.cwd!())
+  end
+
+  defp default_pool_count do
+    case :erlang.system_info(:logical_processors_available) do
+      count when is_integer(count) and count > 0 ->
+        count
+
+      _ ->
+        case :erlang.system_info(:schedulers_online) do
+          count when is_integer(count) and count > 0 -> count
+          _ -> System.schedulers_online()
+        end
+    end
   end
 end
