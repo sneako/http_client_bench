@@ -26,7 +26,7 @@ apt-get install -y --no-install-recommends \
   libcurl4-openssl-dev
 
 cat >/etc/profile.d/99-finch-bench.sh <<'ENVVARS'
-if [[ -z "${MIX_OS_DEPS_COMPILE_PARTITION_COUNT:-}" ]]; then
+if [[ -z "$${MIX_OS_DEPS_COMPILE_PARTITION_COUNT:-}" ]]; then
   sockets=$(lscpu | awk -F: '/Socket\\(s\\)/ {gsub(/ /,"",$2); print $2}' | head -n1)
   cores_per_socket=$(lscpu | awk -F: '/Core\\(s\\) per socket/ {gsub(/ /,"",$2); print $2}' | head -n1)
   if [[ -n "$sockets" && -n "$cores_per_socket" ]]; then
