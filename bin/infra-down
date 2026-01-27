@@ -5,16 +5,56 @@ ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 INFRA_DIR="$ROOT_DIR/infra/terraform"
 HOSTS_FILE="$ROOT_DIR/infra/hosts.json"
 TFVARS_FILE="$INFRA_DIR/terraform.tfvars"
+TMP_TFVARS_FILE=""
 
 if [[ ! -d "$INFRA_DIR" ]]; then
   echo "Terraform directory not found: $INFRA_DIR" >&2
   exit 1
 fi
 
+ssh_key_path="${BENCH_SSH_KEY_PATH:-}"
+if [[ -z "$ssh_key_path" && -f "$HOSTS_FILE" ]]; then
+  ssh_key_path=$(jq -r '.ssh_key_path // empty' "$HOSTS_FILE")
+fi
+if [[ -z "$ssh_key_path" ]]; then
+  if [[ -f "$HOME/.ssh/id_ed25519" ]]; then
+    ssh_key_path="$HOME/.ssh/id_ed25519"
+  elif [[ -f "$HOME/.ssh/id_rsa" ]]; then
+    ssh_key_path="$HOME/.ssh/id_rsa"
+  fi
+fi
+
+ssh_public_key_path="${BENCH_SSH_PUBLIC_KEY_PATH:-}"
+if [[ -z "$ssh_public_key_path" && -n "$ssh_key_path" ]]; then
+  ssh_public_key_path="${ssh_key_path}.pub"
+fi
+
+region="${AWS_REGION:-${BENCH_AWS_REGION:-}}"
+if [[ -z "$region" && -f "$HOSTS_FILE" ]]; then
+  region=$(jq -r '.region // empty' "$HOSTS_FILE")
+fi
+region="${region:-eu-central-1}"
+
 pushd "$INFRA_DIR" >/dev/null
-terraform destroy -auto-approve || true
+if [[ -f "$TFVARS_FILE" ]]; then
+  terraform destroy -auto-approve -var-file="$TFVARS_FILE" || true
+else
+  if [[ -z "$ssh_public_key_path" || ! -f "$ssh_public_key_path" ]]; then
+    echo "SSH public key not found. Set BENCH_SSH_PUBLIC_KEY_PATH or BENCH_SSH_KEY_PATH." >&2
+    exit 1
+  fi
+  TMP_TFVARS_FILE="$INFRA_DIR/terraform.destroy.tfvars"
+  cat > "$TMP_TFVARS_FILE" <<EOFVARS
+region             = "${region}"
+ssh_public_key_path = "${ssh_public_key_path}"
+EOFVARS
+  terraform destroy -auto-approve -var-file="$TMP_TFVARS_FILE" || true
+fi
 popd >/dev/null
 
 rm -f "$HOSTS_FILE" "$TFVARS_FILE"
+if [[ -n "$TMP_TFVARS_FILE" ]]; then
+  rm -f "$TMP_TFVARS_FILE"
+fi
 
 echo "Infrastructure torn down."
