@@ -75,7 +75,7 @@ Implemented the Terraform module, OpenResty server configuration, benchmark suit
 
 ## Context and Orientation
 
-Finch is an HTTP client library whose source lives under `lib/`. This plan introduces a new benchmarking suite under `suite`, a standalone OpenResty-based server configuration under `infra/server`, and new infrastructure automation under `infra` and `bin`.
+Finch is an HTTP client library; this repository is a standalone benchmark suite that can point at a local Finch checkout (defaulting to `../../finch` from `suite/`) or a git/hex source. The suite lives under `suite`, the OpenResty server configuration under `infra/server`, and infrastructure automation under `infra` and `bin`.
 
 Terraform is a declarative tool that describes cloud infrastructure in text files and then creates, updates, or destroys it. EC2 is AWS’s virtual machine service. An AMI is a base machine image from which an EC2 instance is created. A VPC is a private virtual network; a subnet is a range of IP addresses inside a VPC. A security group is a virtual firewall that controls which IPs and ports can reach an instance. These terms are used throughout this plan.
 

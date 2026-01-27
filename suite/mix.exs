@@ -43,11 +43,11 @@ defmodule Bench.MixProject do
         {:finch, version}
 
       "path" ->
-        path = System.get_env("BENCH_FINCH_PATH") || "../../"
+        path = System.get_env("BENCH_FINCH_PATH") || "../../finch"
         {:finch, path: path}
 
       nil ->
-        {:finch, path: "../../"}
+        {:finch, path: "../../finch"}
 
       other ->
         raise "Unsupported BENCH_FINCH_SOURCE=#{other}"
