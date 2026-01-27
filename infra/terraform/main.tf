@@ -120,9 +120,25 @@ resource "aws_security_group" "server" {
   }
 
   ingress {
+    description     = "Benchmark HTTPS from client"
+    from_port       = var.bench_tls_port
+    to_port         = var.bench_tls_port
+    protocol        = "tcp"
+    security_groups = [aws_security_group.client.id]
+  }
+
+  ingress {
     description = "Benchmark HTTP from admin"
     from_port   = var.bench_port
     to_port     = var.bench_port
+    protocol    = "tcp"
+    cidr_blocks = [var.admin_cidr]
+  }
+
+  ingress {
+    description = "Benchmark HTTPS from admin"
+    from_port   = var.bench_tls_port
+    to_port     = var.bench_tls_port
     protocol    = "tcp"
     cidr_blocks = [var.admin_cidr]
   }

@@ -11,6 +11,9 @@ defmodule Bench.Clients.Hackney do
 
   @impl true
   def setup(%Config{} = config) do
+    if config.http_version == "http2" do
+      {:error, :http2_not_supported}
+    else
     pool = :bench_hackney
     options = [pool_size: config.pool_size, timeout: config.request_timeout_ms]
 
@@ -19,6 +22,7 @@ defmodule Bench.Clients.Hackney do
       {:ok, _pid} -> {:ok, %{pool: pool, config: config}}
       {:error, reason} -> {:error, reason}
       other -> {:ok, %{pool: pool, config: config, info: other}}
+    end
     end
   end
 
@@ -29,6 +33,7 @@ defmodule Bench.Clients.Hackney do
     body = scenario.body || ""
 
     opts = [pool: state.pool, recv_timeout: state.config.request_timeout_ms]
+    opts = maybe_insecure(opts, state.config)
 
     case :hackney.request(scenario.method, url, headers, body, opts) do
       {:ok, _status, _resp_headers, client_ref} ->
@@ -63,4 +68,10 @@ defmodule Bench.Clients.Hackney do
   defp build_url(config, scenario) do
     "#{config.scheme}://#{config.server_host}:#{config.server_port}#{scenario.path}"
   end
+
+  defp maybe_insecure(opts, %Config{scheme: "https", tls_verify: false}) do
+    Keyword.put(opts, :insecure, true)
+  end
+
+  defp maybe_insecure(opts, _config), do: opts
 end

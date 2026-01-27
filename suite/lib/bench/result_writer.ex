@@ -40,6 +40,7 @@ defmodule Bench.ResultWriter do
         server_host: config.server_host,
         server_port: config.server_port,
         scheme: config.scheme,
+        http_version: config.http_version,
         duration_s: config.duration_s,
         warmup_s: config.warmup_s,
         concurrency: config.concurrency,
@@ -49,6 +50,7 @@ defmodule Bench.ResultWriter do
         pool_count: config.pool_count,
         gun_conns: config.gun_conns,
         request_timeout_ms: config.request_timeout_ms,
+        tls_verify: config.tls_verify,
         ddskerl_error: config.ddskerl_error,
         ddskerl_bound: config.ddskerl_bound
       },

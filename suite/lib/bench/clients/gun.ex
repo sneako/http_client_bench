@@ -14,11 +14,12 @@ defmodule Bench.Clients.Gun do
     host = String.to_charlist(config.server_host)
     port = config.server_port
     conn_count = max(config.gun_conns, 1)
+    opts = gun_opts(config)
 
     conns =
       1..conn_count
       |> Enum.map(fn _ ->
-        {:ok, pid} = :gun.open(host, port, %{protocols: [:http]})
+        {:ok, pid} = :gun.open(host, port, opts)
         {:ok, _} = :gun.await_up(pid, config.request_timeout_ms)
         pid
       end)
@@ -105,4 +106,27 @@ defmodule Bench.Clients.Gun do
   defp normalize_method(method) when is_list(method) do
     method |> List.to_string() |> String.upcase()
   end
+
+  defp gun_opts(%Config{scheme: "https"} = config) do
+    opts = %{
+      protocols: protocol_list(config),
+      transport: :tls
+    }
+
+    if config.tls_verify do
+      opts
+    else
+      Map.put(opts, :tls_opts, [verify: :verify_none])
+    end
+  end
+
+  defp gun_opts(config) do
+    %{
+      protocols: protocol_list(config),
+      transport: :tcp
+    }
+  end
+
+  defp protocol_list(%Config{http_version: "http2"}), do: [:http2]
+  defp protocol_list(_config), do: [:http]
 end

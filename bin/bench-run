@@ -16,10 +16,39 @@ SERVER_PRIVATE_IP=$(jq -r '.server_private_ip' "$HOSTS_FILE")
 SSH_USER=$(jq -r '.ssh_user' "$HOSTS_FILE")
 SSH_KEY_PATH=$(jq -r '.ssh_key_path' "$HOSTS_FILE")
 BENCH_PORT=$(jq -r '.bench_port' "$HOSTS_FILE")
+BENCH_TLS_PORT=$(jq -r '.bench_tls_port // empty' "$HOSTS_FILE")
 
 if [[ -z "$CLIENT_IP" || -z "$SERVER_IP" || -z "$SSH_USER" || -z "$SSH_KEY_PATH" ]]; then
   echo "Hosts file missing required fields." >&2
   exit 1
+fi
+
+HTTP_VERSION=$(echo "${BENCH_HTTP_VERSION:-http1}" | tr '[:upper:]' '[:lower:]')
+if [[ "$HTTP_VERSION" == "h2" ]]; then
+  HTTP_VERSION="http2"
+fi
+
+SCHEME="${BENCH_SCHEME:-}"
+if [[ -z "$SCHEME" ]]; then
+  if [[ "$HTTP_VERSION" == "http2" ]]; then
+    SCHEME="https"
+  else
+    SCHEME="http"
+  fi
+fi
+
+if [[ "$SCHEME" == "https" ]]; then
+  if [[ -z "$BENCH_TLS_PORT" ]]; then
+    BENCH_TLS_PORT=8443
+  fi
+  BENCH_EFFECTIVE_PORT="$BENCH_TLS_PORT"
+else
+  BENCH_EFFECTIVE_PORT="$BENCH_PORT"
+fi
+
+CURL_INSECURE=""
+if [[ "$SCHEME" == "https" ]]; then
+  CURL_INSECURE="-k"
 fi
 
 SSH_OPTS=(
@@ -54,8 +83,10 @@ set -euo pipefail
 REMOTE_DIR="$REMOTE_DIR"
 ulimit -n 1048576 || true
 mkdir -p /tmp/bench-server/html/static
+mkdir -p /tmp/bench-server/certs
 mkdir -p /tmp/bench-server/logs
 cp -a "$REMOTE_DIR/infra/server/static/." /tmp/bench-server/html/static/
+cp -a "$REMOTE_DIR/infra/server/certs/." /tmp/bench-server/certs/
 cp "$REMOTE_DIR/infra/server/openresty.conf" /tmp/bench-server/openresty.conf
 pkill -f openresty || true
 openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf
@@ -63,7 +94,7 @@ EOSH
 
 for _ in {1..30}; do
   if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
-    "curl -sSf http://${SERVER_PRIVATE_IP}:${BENCH_PORT}/health" >/dev/null; then
+    "curl -sSf ${CURL_INSECURE} ${SCHEME}://${SERVER_PRIVATE_IP}:${BENCH_EFFECTIVE_PORT}/health" >/dev/null; then
     break
   fi
   sleep 2
@@ -79,7 +110,9 @@ run_remote_bench() {
 
   local env_vars=(
     "BENCH_SERVER_HOST=${SERVER_PRIVATE_IP}"
-    "BENCH_SERVER_PORT=${BENCH_PORT}"
+    "BENCH_SERVER_PORT=${BENCH_EFFECTIVE_PORT}"
+    "BENCH_SCHEME=${SCHEME}"
+    "BENCH_HTTP_VERSION=${HTTP_VERSION}"
     "BENCH_RESULTS_DIR=${REMOTE_RESULTS_DIR}/${label}"
     "BENCH_GIT_SHA=${GIT_SHA}"
   )
@@ -93,6 +126,7 @@ run_remote_bench() {
   [[ -n "${BENCH_POOL_COUNT:-}" ]] && env_vars+=("BENCH_POOL_COUNT=${BENCH_POOL_COUNT}")
   [[ -n "${BENCH_GUN_CONNS:-}" ]] && env_vars+=("BENCH_GUN_CONNS=${BENCH_GUN_CONNS}")
   [[ -n "${BENCH_REQUEST_TIMEOUT_MS:-}" ]] && env_vars+=("BENCH_REQUEST_TIMEOUT_MS=${BENCH_REQUEST_TIMEOUT_MS}")
+  [[ -n "${BENCH_TLS_VERIFY:-}" ]] && env_vars+=("BENCH_TLS_VERIFY=${BENCH_TLS_VERIFY}")
   [[ -n "${BENCH_DDSKERL_ERROR:-}" ]] && env_vars+=("BENCH_DDSKERL_ERROR=${BENCH_DDSKERL_ERROR}")
   [[ -n "${BENCH_DDSKERL_BOUND:-}" ]] && env_vars+=("BENCH_DDSKERL_BOUND=${BENCH_DDSKERL_BOUND}")
   [[ -n "${BENCH_ECHO_BYTES:-}" ]] && env_vars+=("BENCH_ECHO_BYTES=${BENCH_ECHO_BYTES}")

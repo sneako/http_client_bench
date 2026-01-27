@@ -65,6 +65,7 @@ Infrastructure:
 - `BENCH_ADMIN_CIDR` (default `0.0.0.0/0`)
 - `BENCH_AMI_ID` (optional): override AMI ID
 - `BENCH_ERLANG_VERSION`, `BENCH_ELIXIR_VERSION` (override `infra/versions.env`)
+- `BENCH_TLS_PORT` (default 8443)
 
 Benchmark run configuration:
 - `BENCH_CLIENTS` (default `finch,hackney,gun` or `all`)
@@ -75,6 +76,8 @@ Benchmark run configuration:
 - `BENCH_POOL_SIZE`, `BENCH_POOL_COUNT` (Finch/Hackney pooling)
 - `BENCH_GUN_CONNS` (Gun connection count)
 - `BENCH_REQUEST_TIMEOUT_MS` (default 30000)
+- `BENCH_HTTP_VERSION` (`http1` or `http2`, default `http1`)
+- `BENCH_TLS_VERIFY` (`true`/`false`, default `false` when using HTTPS)
 - `BENCH_DDSKERL_ERROR`, `BENCH_DDSKERL_BOUND` (DDSketch options)
 - `BENCH_ECHO_BYTES` (default 1024)
 - `BENCH_DELAY_MS` (default 100)
@@ -100,6 +103,9 @@ The OpenResty server provides deterministic endpoints:
 - `/delay/<ms>` sleeps for `<ms>` milliseconds before responding
 
 These are configured in `infra/server/openresty.conf`.
+
+For HTTP/2 runs, the server listens on the TLS port (default 8443) and uses a self-signed cert.
+Hackney does not support HTTP/2; remove it from `BENCH_CLIENTS` when running `BENCH_HTTP_VERSION=http2`.
 
 ## Benchmark Scenarios
 

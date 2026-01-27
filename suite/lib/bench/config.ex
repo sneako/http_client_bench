@@ -7,6 +7,7 @@ defmodule Bench.Config do
   defstruct server_host: "localhost",
             server_port: 8080,
             scheme: "http",
+            http_version: "http1",
             duration_s: 20,
             warmup_s: 5,
             concurrency: 100,
@@ -17,16 +18,27 @@ defmodule Bench.Config do
             pool_count: 1,
             gun_conns: 4,
             request_timeout_ms: 30_000,
+            tls_verify: false,
             ddskerl_error: 0.01,
             ddskerl_bound: 2048,
             echo_bytes: 1024,
             delay_ms: 100
 
   def load do
+    http_version = normalize_http_version(env("BENCH_HTTP_VERSION", "http1"))
+    scheme_default = if http_version == "http2", do: "https", else: "http"
+    scheme = env("BENCH_SCHEME", scheme_default)
+    tls_verify = env_bool("BENCH_TLS_VERIFY", false)
+
+    if http_version == "http2" and scheme != "https" do
+      raise "HTTP/2 requires https; set BENCH_SCHEME=https"
+    end
+
     config = %__MODULE__{
       server_host: env("BENCH_SERVER_HOST", "localhost"),
       server_port: env_int("BENCH_SERVER_PORT", 8080),
-      scheme: env("BENCH_SCHEME", "http"),
+      scheme: scheme,
+      http_version: http_version,
       duration_s: env_int("BENCH_DURATION", 20),
       warmup_s: env_int("BENCH_WARMUP", 5),
       concurrency: env_int("BENCH_CONCURRENCY", 100),
@@ -34,6 +46,7 @@ defmodule Bench.Config do
       pool_count: env_int("BENCH_POOL_COUNT", default_pool_count()),
       gun_conns: env_int("BENCH_GUN_CONNS", 4),
       request_timeout_ms: env_int("BENCH_REQUEST_TIMEOUT_MS", 30_000),
+      tls_verify: tls_verify,
       ddskerl_error: env_float("BENCH_DDSKERL_ERROR", 0.01),
       ddskerl_bound: env_int("BENCH_DDSKERL_BOUND", 2048),
       echo_bytes: env_int("BENCH_ECHO_BYTES", 1024),
@@ -55,12 +68,18 @@ defmodule Bench.Config do
         names -> Enum.map(names, &String.to_atom/1)
       end
 
-    %__MODULE__{
+    config = %__MODULE__{
       config
       | scenarios: scenarios,
         clients: client_ids,
         result_dir: env("BENCH_RESULTS_DIR", default_results_dir())
     }
+
+    if config.http_version == "http2" and :hackney in config.clients do
+      raise "hackney does not support HTTP/2; remove it from BENCH_CLIENTS"
+    end
+
+    config
   end
 
   def ddskerl_opts(%__MODULE__{ddskerl_error: error, ddskerl_bound: bound}) do
@@ -159,6 +178,25 @@ defmodule Bench.Config do
         value
         |> String.split(",", trim: true)
         |> Enum.map(&String.trim/1)
+    end
+  end
+
+  defp env_bool(key, default) do
+    case System.get_env(key) do
+      nil -> default
+      "" -> default
+      value -> value in ["1", "true", "TRUE", "yes", "YES"]
+    end
+  end
+
+  defp normalize_http_version(value) do
+    case String.downcase(value) do
+      "h2" -> "http2"
+      "http2" -> "http2"
+      "http/2" -> "http2"
+      "http1" -> "http1"
+      "http/1" -> "http1"
+      other -> other
     end
   end
 

@@ -19,6 +19,7 @@ CLIENT_TYPE=${BENCH_CLIENT_INSTANCE_TYPE:-c7a.2xlarge}
 SERVER_TYPE=${BENCH_SERVER_INSTANCE_TYPE:-c7a.2xlarge}
 ADMIN_CIDR=${BENCH_ADMIN_CIDR:-0.0.0.0/0}
 BENCH_PORT=${BENCH_PORT:-8080}
+BENCH_TLS_PORT=${BENCH_TLS_PORT:-8443}
 AMI_ID=${BENCH_AMI_ID:-}
 
 SSH_KEY_PATH=${BENCH_SSH_KEY_PATH:-}
@@ -46,6 +47,7 @@ server_instance_type = "${SERVER_TYPE}"
 ssh_public_key_path  = "${SSH_PUBLIC_KEY_PATH}"
 admin_cidr         = "${ADMIN_CIDR}"
 bench_port         = ${BENCH_PORT}
+bench_tls_port     = ${BENCH_TLS_PORT}
 erlang_version     = "${ERLANG_VERSION}"
 elixir_version     = "${ELIXIR_VERSION}"
 ami_id             = "${AMI_ID}"

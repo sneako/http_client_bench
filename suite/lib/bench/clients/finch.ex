@@ -12,7 +12,10 @@ defmodule Bench.Clients.Finch do
   @impl true
   def setup(%Config{} = config) do
     name = BenchFinch
-    pools = %{default: [size: config.pool_size, count: config.pool_count]}
+    pool_opts = [size: config.pool_size, count: config.pool_count]
+    pool_opts = maybe_set_protocols(pool_opts, config)
+    pool_opts = maybe_set_conn_opts(pool_opts, config)
+    pools = %{default: pool_opts}
 
     case Finch.start_link(name: name, pools: pools) do
       {:ok, pid} ->
@@ -50,4 +53,17 @@ defmodule Bench.Clients.Finch do
   defp build_url(config, scenario) do
     "#{config.scheme}://#{config.server_host}:#{config.server_port}#{scenario.path}"
   end
+
+  defp maybe_set_protocols(pool_opts, %Config{http_version: "http2"}) do
+    Keyword.put(pool_opts, :protocols, [:http2])
+  end
+
+  defp maybe_set_protocols(pool_opts, _config), do: pool_opts
+
+  defp maybe_set_conn_opts(pool_opts, %Config{scheme: "https", tls_verify: false}) do
+    conn_opts = [transport_opts: [verify: :verify_none]]
+    Keyword.put(pool_opts, :conn_opts, conn_opts)
+  end
+
+  defp maybe_set_conn_opts(pool_opts, _config), do: pool_opts
 end

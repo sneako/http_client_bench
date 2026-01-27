@@ -22,3 +22,8 @@ output "bench_port" {
   description = "Benchmark server port."
   value       = var.bench_port
 }
+
+output "bench_tls_port" {
+  description = "Benchmark server TLS port."
+  value       = var.bench_tls_port
+}

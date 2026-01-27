@@ -45,6 +45,12 @@ variable "bench_port" {
   default     = 8080
 }
 
+variable "bench_tls_port" {
+  type        = number
+  description = "TCP port that the benchmark server listens on for TLS/HTTP2."
+  default     = 8443
+}
+
 variable "ami_id" {
   type        = string
   description = "Optional AMI ID override. Leave blank to use the latest Ubuntu 22.04 AMD64 AMI."
