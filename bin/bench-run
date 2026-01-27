@@ -154,8 +154,8 @@ if [[ -n "${BENCH_FINCH_MATRIX:-}" ]]; then
     run_remote_bench "$label" "$source" "$ref" "$version"
   done
 else
-  source="${BENCH_FINCH_SOURCE:-path}"
-  ref="${BENCH_FINCH_REF:-}"
+  source="${BENCH_FINCH_SOURCE:-git}"
+  ref="${BENCH_FINCH_REF:-main}"
   version="${BENCH_FINCH_VERSION:-}"
   run_remote_bench "default" "$source" "$ref" "$version"
 fi

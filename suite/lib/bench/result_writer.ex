@@ -53,7 +53,7 @@ defmodule Bench.ResultWriter do
         ddskerl_bound: config.ddskerl_bound
       },
       finch: %{
-        source: System.get_env("BENCH_FINCH_SOURCE") || "path",
+        source: System.get_env("BENCH_FINCH_SOURCE") || "git",
         ref: System.get_env("BENCH_FINCH_REF"),
         version: System.get_env("BENCH_FINCH_VERSION"),
         app_version: app_version(:finch)

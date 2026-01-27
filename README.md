@@ -80,8 +80,8 @@ Benchmark run configuration:
 - `BENCH_DELAY_MS` (default 100)
 
 Finch version selection:
-- `BENCH_FINCH_SOURCE` (`path`, `git`, or `hex`)
-- `BENCH_FINCH_REF` (git ref when using `git`)
+- `BENCH_FINCH_SOURCE` (`path`, `git`, or `hex`, default `git`)
+- `BENCH_FINCH_REF` (git ref when using `git`, default `main`)
 - `BENCH_FINCH_GIT` (git URL override)
 - `BENCH_FINCH_VERSION` (hex version when using `hex`)
 - `BENCH_FINCH_MATRIX` (comma-separated, e.g. `path,git:main,hex:0.19.2`)

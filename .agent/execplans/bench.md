@@ -186,7 +186,7 @@ The three user-facing scripts are required and must live at the following paths 
 
 - `bin/infra-up` provisions infrastructure and writes `infra/hosts.json`. It accepts configuration via environment variables such as `AWS_PROFILE`, `AWS_REGION`, `BENCH_CLIENT_INSTANCE_TYPE`, `BENCH_SERVER_INSTANCE_TYPE`, `BENCH_SSH_KEY_PATH`, `BENCH_ADMIN_CIDR`, and `BENCH_RESULTS_BUCKET`. It must print the client and server IPs on success.
 
-- `bin/bench-run` reads `infra/hosts.json`, syncs the repo to the VMs, starts the server, runs the benchmark, and copies results to `results/<timestamp>/`. It accepts `BENCH_CLIENTS` (comma-separated list of client ids, or `all`; default `finch,hackney,gun`), `BENCH_SCENARIOS`, `BENCH_DURATION`, `BENCH_CONCURRENCY`, `BENCH_FINCH_SOURCE`, `BENCH_FINCH_REF`, and `BENCH_FINCH_MATRIX` to run multiple Finch versions sequentially.
+- `bin/bench-run` reads `infra/hosts.json`, syncs the repo to the VMs, starts the server, runs the benchmark, and copies results to `results/<timestamp>/`. It accepts `BENCH_CLIENTS` (comma-separated list of client ids, or `all`; default `finch,hackney,gun`), `BENCH_SCENARIOS`, `BENCH_DURATION`, `BENCH_CONCURRENCY`, `BENCH_FINCH_SOURCE` (default `git`), `BENCH_FINCH_REF` (default `main`), and `BENCH_FINCH_MATRIX` to run multiple Finch versions sequentially.
 
 - `bin/infra-down` destroys infrastructure using the same Terraform state and variables used by `infra-up`.
 

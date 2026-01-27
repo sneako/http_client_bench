@@ -33,7 +33,7 @@ defmodule Bench.MixProject do
     case System.get_env("BENCH_FINCH_SOURCE") do
       "git" ->
         git = System.get_env("BENCH_FINCH_GIT") || "https://github.com/sneako/finch.git"
-        ref = System.get_env("BENCH_FINCH_REF")
+        ref = System.get_env("BENCH_FINCH_REF") || "main"
         opts = [git: git]
         opts = if ref, do: Keyword.put(opts, :ref, ref), else: opts
         {:finch, opts}
@@ -47,7 +47,7 @@ defmodule Bench.MixProject do
         {:finch, path: path}
 
       nil ->
-        {:finch, path: "../../finch"}
+        {:finch, git: "https://github.com/sneako/finch.git", ref: "main"}
 
       other ->
         raise "Unsupported BENCH_FINCH_SOURCE=#{other}"
