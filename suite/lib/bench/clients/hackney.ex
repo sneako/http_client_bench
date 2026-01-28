@@ -11,18 +11,14 @@ defmodule Bench.Clients.Hackney do
 
   @impl true
   def setup(%Config{} = config) do
-    if config.http_version == "http2" do
-      {:error, :http2_not_supported}
-    else
     pool = :bench_hackney
-    options = [pool_size: config.pool_size, timeout: config.request_timeout_ms]
+    options = [max_connections: config.pool_size, timeout: config.request_timeout_ms]
 
     case :hackney_pool.start_pool(pool, options) do
       :ok -> {:ok, %{pool: pool, config: config}}
       {:ok, _pid} -> {:ok, %{pool: pool, config: config}}
       {:error, reason} -> {:error, reason}
       other -> {:ok, %{pool: pool, config: config, info: other}}
-    end
     end
   end
 
@@ -32,7 +28,13 @@ defmodule Bench.Clients.Hackney do
     headers = scenario.headers
     body = scenario.body || ""
 
-    opts = [pool: state.pool, recv_timeout: state.config.request_timeout_ms]
+    opts = [
+      pool: state.pool,
+      recv_timeout: state.config.request_timeout_ms,
+      max_per_host: state.config.pool_size
+    ]
+
+    opts = maybe_protocols(opts, state.config)
     opts = maybe_insecure(opts, state.config)
 
     case :hackney.request(scenario.method, url, headers, body, opts) do
@@ -68,6 +70,10 @@ defmodule Bench.Clients.Hackney do
   defp build_url(config, scenario) do
     "#{config.scheme}://#{config.server_host}:#{config.server_port}#{scenario.path}"
   end
+
+  defp maybe_protocols(opts, %Config{http_version: "http2"}), do: Keyword.put(opts, :protocols, [:http2])
+  defp maybe_protocols(opts, %Config{http_version: "http1"}), do: Keyword.put(opts, :protocols, [:http1])
+  defp maybe_protocols(opts, _config), do: opts
 
   defp maybe_insecure(opts, %Config{scheme: "https", tls_verify: false}) do
     Keyword.put(opts, :insecure, true)

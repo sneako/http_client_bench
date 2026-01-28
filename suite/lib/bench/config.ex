@@ -75,10 +75,6 @@ defmodule Bench.Config do
         result_dir: env("BENCH_RESULTS_DIR", default_results_dir())
     }
 
-    if config.http_version == "http2" and :hackney in config.clients do
-      raise "hackney does not support HTTP/2; remove it from BENCH_CLIENTS"
-    end
-
     config
   end
 

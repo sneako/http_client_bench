@@ -21,7 +21,7 @@ defmodule Bench.MixProject do
   defp deps do
     [
       finch_dep(),
-      {:hackney, "~> 1.20"},
+      {:hackney, "~> 2.0"},
       {:gun, "~> 2.1"},
       {:jason, "~> 1.4"},
       {:ddskerl, "~> 0.2"},

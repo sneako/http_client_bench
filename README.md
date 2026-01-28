@@ -105,7 +105,7 @@ The OpenResty server provides deterministic endpoints:
 These are configured in `infra/server/openresty.conf`.
 
 For HTTP/2 runs, the server listens on the TLS port (default 8443) and uses a self-signed cert.
-Hackney does not support HTTP/2; remove it from `BENCH_CLIENTS` when running `BENCH_HTTP_VERSION=http2`.
+Hackney HTTP/2 support requires Hackney 2.x and HTTPS (ALPN). This suite wires it when `BENCH_HTTP_VERSION=http2`.
 
 ## Benchmark Scenarios
 
