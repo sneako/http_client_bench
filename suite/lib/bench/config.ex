@@ -84,6 +84,7 @@ defmodule Bench.Config do
 
   defp default_scenarios(%__MODULE__{echo_bytes: echo_bytes, delay_ms: delay_ms}) do
     body = :binary.copy("a", echo_bytes)
+    json_32k = json_payload(32_768)
 
     [
       %Scenario{name: "health", method: :get, path: "/health", response_bytes: 2},
@@ -108,8 +109,17 @@ defmodule Bench.Config do
       %Scenario{
         name: "delay_var",
         method: :get,
-        path: "/delay/0",
+        path: "/delay/{ms}",
         response_bytes: 0,
+        delay_range_ms: {20, 200}
+      },
+      %Scenario{
+        name: "delay_post",
+        method: :post,
+        path: "/delay_post/{ms}",
+        headers: [{"content-type", "application/json"}],
+        body: json_32k,
+        response_bytes: 32_768,
         delay_range_ms: {20, 200}
       }
     ]
@@ -199,6 +209,14 @@ defmodule Bench.Config do
   defp default_results_dir do
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y-%m-%dT%H%M%SZ")
     Path.expand("../results/#{timestamp}", File.cwd!())
+  end
+
+  defp json_payload(target_bytes) when is_integer(target_bytes) and target_bytes > 0 do
+    prefix = "{\"payload\":\""
+    suffix = "\"}"
+    overhead = byte_size(prefix) + byte_size(suffix)
+    payload_size = max(target_bytes - overhead, 0)
+    prefix <> String.duplicate("a", payload_size) <> suffix
   end
 
   defp default_pool_count do

@@ -150,7 +150,14 @@ defmodule Bench.Runner do
   defp materialize_scenario(%Bench.Scenario{delay_range_ms: {min_ms, max_ms}} = scenario)
        when is_integer(min_ms) and is_integer(max_ms) and max_ms >= min_ms do
     ms = min_ms + :rand.uniform(max_ms - min_ms + 1) - 1
-    %{scenario | path: "/delay/#{ms}"}
+    path =
+      if String.contains?(scenario.path, "{ms}") do
+        String.replace(scenario.path, "{ms}", Integer.to_string(ms))
+      else
+        "/delay/#{ms}"
+      end
+
+    %{scenario | path: path}
   end
 
   defp materialize_scenario(scenario), do: scenario
