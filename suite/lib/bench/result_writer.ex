@@ -175,7 +175,12 @@ defmodule Bench.ResultWriter do
       results
       |> Enum.flat_map(fn result ->
         Enum.map(result.error_reasons, fn {reason, count} ->
-          [format_field(result.client), format_field(result.scenario), format_field(reason), count]
+          [
+            format_field(result.client),
+            format_field(result.scenario),
+            format_field(reason),
+            count
+          ]
         end)
       end)
 

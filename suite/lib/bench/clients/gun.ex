@@ -116,7 +116,7 @@ defmodule Bench.Clients.Gun do
     if config.tls_verify do
       opts
     else
-      Map.put(opts, :tls_opts, [verify: :verify_none])
+      Map.put(opts, :tls_opts, verify: :verify_none)
     end
   end
 

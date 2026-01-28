@@ -136,6 +136,9 @@ run_remote_bench() {
   [[ -n "${BENCH_DDSKERL_BOUND:-}" ]] && env_vars+=("BENCH_DDSKERL_BOUND=${BENCH_DDSKERL_BOUND}")
   [[ -n "${BENCH_ECHO_BYTES:-}" ]] && env_vars+=("BENCH_ECHO_BYTES=${BENCH_ECHO_BYTES}")
   [[ -n "${BENCH_DELAY_MS:-}" ]] && env_vars+=("BENCH_DELAY_MS=${BENCH_DELAY_MS}")
+  [[ -n "${BENCH_TUNE:-}" ]] && env_vars+=("BENCH_TUNE=${BENCH_TUNE}")
+  [[ -n "${BENCH_TUNE_POOL_SIZES:-}" ]] && env_vars+=("BENCH_TUNE_POOL_SIZES=${BENCH_TUNE_POOL_SIZES}")
+  [[ -n "${BENCH_TUNE_POOL_COUNTS:-}" ]] && env_vars+=("BENCH_TUNE_POOL_COUNTS=${BENCH_TUNE_POOL_COUNTS}")
 
   env_vars+=("BENCH_FINCH_SOURCE=${source}")
   [[ -n "${BENCH_FINCH_GIT:-}" ]] && env_vars+=("BENCH_FINCH_GIT=${BENCH_FINCH_GIT}")

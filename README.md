@@ -33,6 +33,10 @@ Results are written to `results/<timestamp>/` on your local machine:
 - `metadata.csv` (run metadata)
 - `errors.csv` (error counts by client/scenario/reason)
 
+When `BENCH_TUNE=1`, a `tune/` subdirectory is created with:
+- `tune.csv` (per-combination results)
+- `tune_winners.csv` (best pool size/count per scenario with zero errors)
+
 ## Notes
 
 - OpenResty is installed automatically on the server VM by `infra-up`; no manual server setup is required.
@@ -52,6 +56,9 @@ Examples:
 ```
 # Finch only, longer duration, higher concurrency.
 BENCH_CLIENTS=finch BENCH_DURATION=60 BENCH_CONCURRENCY=500 ./bin/bench-run
+
+# Tune Finch pool size/count combinations (Finch only).
+BENCH_TUNE=1 ./bin/bench-run
 
 # Compare multiple Finch versions in a single run.
 BENCH_FINCH_MATRIX=path,git:main,hex:0.19.2 ./bin/bench-run
@@ -73,7 +80,7 @@ Infrastructure:
 Benchmark run configuration:
 - `BENCH_CLIENTS` (default `finch,hackney,gun` or `all`)
 - `BENCH_SCENARIOS` (default all): comma-separated scenario names
-- `BENCH_DURATION` (seconds, default 20)
+- `BENCH_DURATION` (seconds, default 30)
 - `BENCH_WARMUP` (seconds, default 5)
 - `BENCH_CONCURRENCY` (default 100)
 - `BENCH_POOL_SIZE`, `BENCH_POOL_COUNT` (Finch/Hackney pooling)
@@ -84,6 +91,9 @@ Benchmark run configuration:
 - `BENCH_DDSKERL_ERROR`, `BENCH_DDSKERL_BOUND` (DDSketch options)
 - `BENCH_ECHO_BYTES` (default 1024; supported sizes: 1024, 4096, 131072, 1048576)
 - `BENCH_DELAY_MS` (default 100)
+- `BENCH_TUNE` (set to enable Finch pool size/count tuning)
+- `BENCH_TUNE_POOL_SIZES` (optional, comma-separated; defaults to `50,100,200`)
+- `BENCH_TUNE_POOL_COUNTS` (optional, comma-separated; defaults to `cpu/4,cpu/2,cpu,cpu*2,cpu*4`)
 
 Finch version selection:
 - `BENCH_FINCH_SOURCE` (`path`, `git`, or `hex`, default `git`)

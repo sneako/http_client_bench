@@ -15,9 +15,14 @@ defmodule Mix.Tasks.Bench.Run do
 
     config = Bench.Config.load()
 
-    {:ok, results} = Bench.Runner.run(config)
-    :ok = Bench.ResultWriter.write(results, config)
-    Mix.shell().info("Results written to #{config.result_dir}")
+    if Bench.Tuner.enabled?() do
+      {:ok, summary} = Bench.Tuner.run(config)
+      Mix.shell().info("Tune results written to #{summary.tune_dir}")
+    else
+      {:ok, results} = Bench.Runner.run(config)
+      :ok = Bench.ResultWriter.write(results, config)
+      Mix.shell().info("Results written to #{config.result_dir}")
+    end
   end
 
   defp ensure_started(apps) do

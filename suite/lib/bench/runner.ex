@@ -12,6 +12,7 @@ defmodule Bench.Runner do
     results =
       Enum.flat_map(client_modules, fn client_module ->
         log_info("Starting client #{client_module.id()}")
+
         case client_module.setup(config) do
           {:ok, state} ->
             scenario_results =
@@ -93,7 +94,15 @@ defmodule Bench.Runner do
     }
   end
 
-  defp run_phase(duration_ms, request_timeout_ms, concurrency, client_module, state, scenario, metrics) do
+  defp run_phase(
+         duration_ms,
+         request_timeout_ms,
+         concurrency,
+         client_module,
+         state,
+         scenario,
+         metrics
+       ) do
     deadline = System.monotonic_time(:millisecond) + duration_ms
 
     tasks =
@@ -143,5 +152,4 @@ defmodule Bench.Runner do
       worker_loop(deadline, client_module, state, scenario, metrics)
     end
   end
-
 end
