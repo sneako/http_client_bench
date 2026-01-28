@@ -13,6 +13,7 @@ apt-get install -y --no-install-recommends \
   rsync \
   jq \
   cmake \
+  zlib1g-dev \
   autoconf \
   m4 \
   libncurses5-dev \
