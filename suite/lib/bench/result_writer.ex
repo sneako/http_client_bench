@@ -166,7 +166,9 @@ defmodule Bench.ResultWriter do
   defp format_field(value) when is_float(value),
     do: :io_lib.format("~.4f", [value]) |> IO.iodata_to_binary()
 
-  defp format_field(value), do: to_string(value)
+  defp format_field(value) when is_boolean(value), do: if(value, do: "true", else: "false")
+  defp format_field(value) when is_struct(value), do: inspect(value)
+  defp format_field(value), do: inspect(value)
 
   defp errors_csv(results) do
     header = ["client", "scenario", "reason", "count"]

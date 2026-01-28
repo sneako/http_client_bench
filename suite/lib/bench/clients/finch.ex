@@ -16,13 +16,14 @@ defmodule Bench.Clients.Finch do
     pool_opts = maybe_set_protocols(pool_opts, config)
     pool_opts = maybe_set_conn_opts(pool_opts, config)
     pools = %{default: pool_opts}
+    child = {Finch, name: name, pools: pools}
 
-    case Finch.start_link(name: name, pools: pools) do
-      {:ok, pid} ->
-        {:ok, %{name: name, pid: pid, config: config}}
+    case Supervisor.start_link([child], strategy: :one_for_one) do
+      {:ok, sup_pid} ->
+        {:ok, %{name: name, sup_pid: sup_pid, config: config}}
 
-      {:error, {:already_started, pid}} ->
-        {:ok, %{name: name, pid: pid, config: config}}
+      {:error, {:already_started, sup_pid}} ->
+        {:ok, %{name: name, sup_pid: sup_pid, config: config}}
 
       {:error, reason} ->
         {:error, reason}
@@ -34,7 +35,13 @@ defmodule Bench.Clients.Finch do
     url = build_url(state.config, scenario)
     req = Finch.build(scenario.method, url, scenario.headers, scenario.body)
 
-    case Finch.request(req, state.name, receive_timeout: state.config.request_timeout_ms) do
+    try do
+      Finch.request(req, state.name, receive_timeout: state.config.request_timeout_ms)
+    rescue
+      exception -> {:error, exception}
+    catch
+      kind, reason -> {:error, {kind, reason}}
+    else
       {:ok, _response} -> :ok
       {:error, reason} -> {:error, reason}
     end
@@ -42,9 +49,8 @@ defmodule Bench.Clients.Finch do
 
   @impl true
   def teardown(state) do
-    if Process.alive?(state.pid) do
-      Process.unlink(state.pid)
-      Process.exit(state.pid, :shutdown)
+    if Process.alive?(state.sup_pid) do
+      Supervisor.stop(state.sup_pid, :shutdown)
     end
 
     :ok
