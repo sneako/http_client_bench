@@ -12,6 +12,7 @@ defmodule Bench.ResultWriter do
 
     File.write!(Path.join(config.result_dir, "summary.csv"), summary_csv(summary))
     File.write!(Path.join(config.result_dir, "metadata.csv"), metadata_csv(metadata))
+    File.write!(Path.join(config.result_dir, "errors.csv"), errors_csv(results))
 
     :ok
   end
@@ -166,4 +167,18 @@ defmodule Bench.ResultWriter do
     do: :io_lib.format("~.4f", [value]) |> IO.iodata_to_binary()
 
   defp format_field(value), do: to_string(value)
+
+  defp errors_csv(results) do
+    header = ["client", "scenario", "reason", "count"]
+
+    rows =
+      results
+      |> Enum.flat_map(fn result ->
+        Enum.map(result.error_reasons, fn {reason, count} ->
+          [format_field(result.client), format_field(result.scenario), format_field(reason), count]
+        end)
+      end)
+
+    CSV.dump_to_iodata([header | rows])
+  end
 end

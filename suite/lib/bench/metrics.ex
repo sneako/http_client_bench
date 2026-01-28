@@ -3,12 +3,13 @@ defmodule Bench.Metrics do
 
   alias Bench.Config
 
-  defstruct sketch: nil, error_counter: nil
+  defstruct sketch: nil, error_counter: nil, error_table: nil
 
   def new(%Config{} = config) do
     sketch = :ddskerl_counters.new(Config.ddskerl_opts(config))
     errors = :counters.new(1, [:write_concurrency])
-    %__MODULE__{sketch: sketch, error_counter: errors}
+    error_table = :ets.new(:bench_error_reasons, [:set, :private, {:write_concurrency, true}])
+    %__MODULE__{sketch: sketch, error_counter: errors, error_table: error_table}
   end
 
   def record_ok(%__MODULE__{sketch: sketch}, latency_us) do
@@ -16,19 +17,23 @@ defmodule Bench.Metrics do
     :ok
   end
 
-  def record_error(%__MODULE__{error_counter: errors}) do
+  def record_error(%__MODULE__{error_counter: errors, error_table: error_table}, reason) do
     :counters.add(errors, 1, 1)
+    key = normalize_reason(reason)
+    _ = :ets.update_counter(error_table, key, {2, 1}, {key, 0})
     :ok
   end
 
-  def snapshot(%__MODULE__{sketch: sketch, error_counter: errors}) do
+  def snapshot(%__MODULE__{sketch: sketch, error_counter: errors, error_table: error_table}) do
     total = :ddskerl_counters.total(sketch)
     sum = :ddskerl_counters.sum(sketch)
     mean = if total > 0, do: sum / total, else: 0.0
+    error_reasons = :ets.tab2list(error_table)
 
     %{
       total: total,
       errors: :counters.get(errors, 1),
+      error_reasons: error_reasons,
       min: quantile(sketch, total, 0.0),
       max: quantile(sketch, total, 1.0),
       mean: mean,
@@ -46,4 +51,8 @@ defmodule Bench.Metrics do
       value -> value
     end
   end
+
+  defp normalize_reason({:error, reason}), do: normalize_reason(reason)
+  defp normalize_reason({kind, reason}) when is_atom(kind), do: {kind, normalize_reason(reason)}
+  defp normalize_reason(reason), do: reason
 end

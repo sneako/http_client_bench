@@ -12,5 +12,6 @@ defmodule Bench.Result do
             mean_us: nil,
             p50_us: nil,
             p90_us: nil,
-            p99_us: nil
+            p99_us: nil,
+            error_reasons: []
 end

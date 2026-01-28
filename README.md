@@ -28,7 +28,10 @@ This repository contains the automated benchmark infrastructure and suite for Fi
 ./bin/infra-down
 ```
 
-Results are written to `results/<timestamp>/` on your local machine.
+Results are written to `results/<timestamp>/` on your local machine:
+- `summary.csv` (performance summary)
+- `metadata.csv` (run metadata)
+- `errors.csv` (error counts by client/scenario/reason)
 
 ## Notes
 

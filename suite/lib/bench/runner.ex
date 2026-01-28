@@ -88,7 +88,8 @@ defmodule Bench.Runner do
       mean_us: snapshot.mean,
       p50_us: snapshot.p50,
       p90_us: snapshot.p90,
-      p99_us: snapshot.p99
+      p99_us: snapshot.p99,
+      error_reasons: snapshot.error_reasons
     }
   end
 
@@ -138,8 +139,8 @@ defmodule Bench.Runner do
         {metrics, :ok} ->
           Metrics.record_ok(metrics, end_us - start_us)
 
-        {metrics, {:error, _reason}} ->
-          Metrics.record_error(metrics)
+        {metrics, {:error, reason}} ->
+          Metrics.record_error(metrics, reason)
       end
 
       worker_loop(deadline, client_module, state, scenario, metrics)
