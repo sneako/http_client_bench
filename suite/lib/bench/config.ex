@@ -120,18 +120,16 @@ defmodule Bench.Config do
       %Scenario{
         name: "delay_var",
         method: :get,
-        path: "/delay/{ms}",
-        response_bytes: 0,
-        delay_range_ms: {20, 200}
+        path: "/delay_var",
+        response_bytes: 0
       },
       %Scenario{
         name: "delay_post",
         method: :post,
-        path: "/delay_post/{ms}",
+        path: "/delay_post",
         headers: [{"content-type", "application/json"}],
         body: @json_32k,
-        response_bytes: byte_size(@json_32k),
-        delay_range_ms: {20, 200}
+        response_bytes: byte_size(@json_32k)
       }
     ]
   end

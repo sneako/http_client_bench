@@ -104,7 +104,8 @@ The OpenResty server provides deterministic endpoints:
 - `/echo` returns the request body
 - `/stream` returns 1048576 bytes in 64 flushed chunks
 - `/delay/<ms>` sleeps for `<ms>` milliseconds before responding
-- `/delay_post/<ms>` sleeps for `<ms>` milliseconds; accepts a JSON body and returns a 32KB JSON response 10% of the time
+- `/delay_var` sleeps for a random 20–200ms before responding
+- `/delay_post` sleeps for a random 20–200ms; accepts a JSON body and returns a 32KB JSON response 10% of the time
 
 These are configured in `infra/server/openresty.conf`.
 
@@ -115,5 +116,5 @@ Hackney HTTP/2 support requires Hackney 2.x and HTTPS (ALPN). This suite wires i
 
 The suite uses the endpoints above with fixed names. For the delay tests:
 - `delay` uses the fixed value from `BENCH_DELAY_MS` (default 100ms)
-- `delay_var` picks a random delay between 20–200ms per request
-- `delay_post` sends a 32KB JSON body and randomly receives a 32KB JSON response 10% of the time (20–200ms delay)
+- `delay_var` uses server-side random delays between 20–200ms
+- `delay_post` sends a 32KB JSON body and the server randomly returns a 32KB JSON response 10% of the time (20–200ms delay)

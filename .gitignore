@@ -1,3 +1,6 @@
+# Benchmark artifacts.
+/results/
+
 # Editor artifacts.
 **/*/.expert
 **/*/.elixir_ls
