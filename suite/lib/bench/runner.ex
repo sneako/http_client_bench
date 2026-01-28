@@ -4,6 +4,7 @@ defmodule Bench.Runner do
   alias Bench.ClientRegistry
   alias Bench.Metrics
   alias Bench.Result
+  require Logger
 
   def run(config) do
     client_modules = ClientRegistry.resolve(config.clients)
@@ -38,10 +39,7 @@ defmodule Bench.Runner do
     {:ok, results}
   end
 
-  defp log_info(message) do
-    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
-    IO.puts("[#{timestamp}] #{message}")
-  end
+  defp log_info(message), do: Logger.info(message)
 
   defp run_scenario(client_module, state, config, scenario) do
     warmup_ms = config.warmup_s * 1000
