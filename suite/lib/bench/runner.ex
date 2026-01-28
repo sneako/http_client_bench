@@ -10,10 +10,12 @@ defmodule Bench.Runner do
 
     results =
       Enum.flat_map(client_modules, fn client_module ->
+        log_info("Starting client #{client_module.id()}")
         case client_module.setup(config) do
           {:ok, state} ->
             scenario_results =
               Enum.map(config.scenarios, fn scenario ->
+                log_info("Running #{client_module.id()} scenario #{scenario.name}")
                 run_scenario(client_module, state, config, scenario)
               end)
 
@@ -34,6 +36,11 @@ defmodule Bench.Runner do
       end)
 
     {:ok, results}
+  end
+
+  defp log_info(message) do
+    timestamp = DateTime.utc_now() |> DateTime.to_iso8601()
+    IO.puts("[#{timestamp}] #{message}")
   end
 
   defp run_scenario(client_module, state, config, scenario) do
