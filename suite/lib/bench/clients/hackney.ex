@@ -76,7 +76,9 @@ defmodule Bench.Clients.Hackney do
   defp maybe_protocols(opts, _config), do: opts
 
   defp maybe_insecure(opts, %Config{scheme: "https", tls_verify: false}) do
-    Keyword.put(opts, :insecure, true)
+    opts
+    |> Keyword.put(:insecure, true)
+    |> Keyword.put(:ssl_options, [verify: :verify_none])
   end
 
   defp maybe_insecure(opts, _config), do: opts
