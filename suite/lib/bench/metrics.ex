@@ -8,7 +8,7 @@ defmodule Bench.Metrics do
   def new(%Config{} = config) do
     sketch = :ddskerl_counters.new(Config.ddskerl_opts(config))
     errors = :counters.new(1, [:write_concurrency])
-    error_table = :ets.new(:bench_error_reasons, [:set, :private, {:write_concurrency, true}])
+    error_table = :ets.new(:bench_error_reasons, [:set, :public, {:write_concurrency, true}])
     %__MODULE__{sketch: sketch, error_counter: errors, error_table: error_table}
   end
 
