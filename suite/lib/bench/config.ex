@@ -4,7 +4,7 @@ defmodule Bench.Config do
   alias Bench.ClientRegistry
   alias Bench.Scenario
 
-  @static_dir Path.expand("../../../../infra/server/static", __DIR__)
+  @static_dir Path.expand("../../../infra/server/static", __DIR__)
 
   @json_32k Path.join(@static_dir, "json_32k.json")
             |> File.read!()
