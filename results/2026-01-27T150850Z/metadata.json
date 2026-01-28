@@ -1,0 +1,42 @@
+{
+  "system": {
+    "os_type": "unix/linux",
+    "system_architecture": "x86_64-pc-linux-gnu",
+    "otp_release": "28",
+    "elixir": "1.19.5",
+    "git_sha": "8b998f167752a691506c5b9b95ac943e55bf3bcd"
+  },
+  "bench": {
+    "scheme": "http",
+    "ddskerl_bound": 2048,
+    "pool_size": 50,
+    "ddskerl_error": 0.01,
+    "clients": [
+      "finch"
+    ],
+    "concurrency": 100,
+    "duration_s": 20,
+    "gun_conns": 4,
+    "pool_count": 1,
+    "request_timeout_ms": 30000,
+    "scenarios": [
+      "health",
+      "small",
+      "large",
+      "json",
+      "echo",
+      "stream",
+      "delay"
+    ],
+    "server_host": "10.50.1.229",
+    "server_port": 8080,
+    "warmup_s": 5
+  },
+  "finch": {
+    "version": null,
+    "source": "path",
+    "ref": null,
+    "app_version": "0.21.0"
+  },
+  "generated_at": "2026-01-27T15:12:20.641066Z"
+}
