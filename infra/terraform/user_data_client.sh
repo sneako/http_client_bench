@@ -12,6 +12,7 @@ apt-get install -y --no-install-recommends \
   unzip \
   rsync \
   jq \
+  cmake \
   autoconf \
   m4 \
   libncurses5-dev \
