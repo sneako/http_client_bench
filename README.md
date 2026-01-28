@@ -64,6 +64,20 @@ BENCH_TUNE=1 ./bin/bench-run
 BENCH_FINCH_MATRIX=path,git:main,hex:0.19.2 ./bin/bench-run
 ```
 
+## Tuning Finch Pools
+
+When `BENCH_TUNE=1` is set, the suite runs Finch-only sweeps of pool size/count
+combinations. Each combination writes its own `summary.csv`/`metadata.csv` under
+`results/<timestamp>/tune/ps<pool_size>_pc<pool_count>/`. Aggregated outputs are
+written to `results/<timestamp>/tune/tune.csv` and `tune_winners.csv` (highest
+RPS with zero errors per scenario).
+
+Example:
+
+```
+BENCH_TUNE=1 BENCH_SCENARIOS=health,small BENCH_DURATION=10 ./bin/bench-run
+```
+
 ## Common Environment Variables
 
 Infrastructure:
