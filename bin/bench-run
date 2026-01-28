@@ -66,6 +66,11 @@ mkdir -p "$LOCAL_RESULTS_DIR"
 
 RSYNC_FILTERS=(
   --exclude .git
+  --exclude results
+  --exclude suite/_build
+  --exclude suite/deps
+  --exclude suite/tmp
+  --exclude infra/terraform/.terraform
   --filter=':- .gitignore'
 )
 
