@@ -18,12 +18,12 @@ defmodule Bench.Clients.Finch do
     pools = %{default: pool_opts}
     child = {Finch, name: name, pools: pools}
 
-    case Supervisor.start_link([child], strategy: :one_for_one) do
-      {:ok, sup_pid} ->
-        {:ok, %{name: name, sup_pid: sup_pid, config: config}}
+    case DynamicSupervisor.start_child(Bench.FinchSupervisor, child) do
+      {:ok, finch_pid} ->
+        {:ok, %{name: name, finch_pid: finch_pid, config: config}}
 
-      {:error, {:already_started, sup_pid}} ->
-        {:ok, %{name: name, sup_pid: sup_pid, config: config}}
+      {:error, {:already_started, finch_pid}} ->
+        {:ok, %{name: name, finch_pid: finch_pid, config: config}}
 
       {:error, reason} ->
         {:error, reason}
@@ -49,8 +49,8 @@ defmodule Bench.Clients.Finch do
 
   @impl true
   def teardown(state) do
-    if Process.alive?(state.sup_pid) do
-      Supervisor.stop(state.sup_pid, :shutdown)
+    if Process.alive?(state.finch_pid) do
+      _ = DynamicSupervisor.terminate_child(Bench.FinchSupervisor, state.finch_pid)
     end
 
     :ok

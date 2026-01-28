@@ -12,6 +12,7 @@ defmodule Bench.Runner do
     results =
       Enum.flat_map(client_modules, fn client_module ->
         log_info("Starting client #{client_module.id()}")
+        log_info("Setting up client #{client_module.id()}")
 
         case client_module.setup(config) do
           {:ok, state} ->
@@ -21,6 +22,7 @@ defmodule Bench.Runner do
                 run_scenario(client_module, state, config, scenario)
               end)
 
+            log_info("Tearing down client #{client_module.id()}")
             _ = client_module.teardown(state)
             scenario_results
 
