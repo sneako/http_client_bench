@@ -4,8 +4,17 @@ defmodule Bench.Config do
   alias Bench.ClientRegistry
   alias Bench.Scenario
 
-  @json_32k Path.expand("../../../../infra/server/static/json_32k.json", __DIR__)
+  @static_dir Path.expand("../../../../infra/server/static", __DIR__)
+
+  @json_32k Path.join(@static_dir, "json_32k.json")
             |> File.read!()
+
+  @echo_payloads %{
+    1024 => Path.join(@static_dir, "echo_1024.bin") |> File.read!(),
+    4096 => Path.join(@static_dir, "small.bin") |> File.read!(),
+    131_072 => Path.join(@static_dir, "medium.bin") |> File.read!(),
+    1_048_576 => Path.join(@static_dir, "large.bin") |> File.read!()
+  }
 
   defstruct server_host: "localhost",
             server_port: 8080,
@@ -86,7 +95,7 @@ defmodule Bench.Config do
   end
 
   defp default_scenarios(%__MODULE__{echo_bytes: echo_bytes, delay_ms: delay_ms}) do
-    body = :binary.copy("a", echo_bytes)
+    body = echo_payload(echo_bytes)
 
     [
       %Scenario{name: "health", method: :get, path: "/health", response_bytes: 2},
@@ -211,6 +220,16 @@ defmodule Bench.Config do
   defp default_results_dir do
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y-%m-%dT%H%M%SZ")
     Path.expand("../results/#{timestamp}", File.cwd!())
+  end
+
+  defp echo_payload(size) do
+    case Map.fetch(@echo_payloads, size) do
+      {:ok, payload} ->
+        payload
+
+      :error ->
+        raise "Unsupported BENCH_ECHO_BYTES=#{size}. Add a static payload under infra/server/static."
+    end
   end
 
   defp default_pool_count do

@@ -82,7 +82,7 @@ Benchmark run configuration:
 - `BENCH_HTTP_VERSION` (`http1` or `http2`, default `http1`)
 - `BENCH_TLS_VERIFY` (`true`/`false`, default `false` when using HTTPS)
 - `BENCH_DDSKERL_ERROR`, `BENCH_DDSKERL_BOUND` (DDSketch options)
-- `BENCH_ECHO_BYTES` (default 1024)
+- `BENCH_ECHO_BYTES` (default 1024; supported sizes: 1024, 4096, 131072, 1048576)
 - `BENCH_DELAY_MS` (default 100)
 
 Finch version selection:
