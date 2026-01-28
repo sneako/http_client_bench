@@ -26,15 +26,21 @@ defmodule Bench.Config do
             clients: [],
             scenarios: [],
             result_dir: nil,
-            pool_size: 50,
-            pool_count: 1,
+            pool_size: 200,
+            pool_count: 32,
             gun_conns: 4,
             request_timeout_ms: 30_000,
             tls_verify: false,
             ddskerl_error: 0.01,
             ddskerl_bound: 2048,
             echo_bytes: 1024,
-            delay_ms: 100
+            delay_ms: 100,
+            target_rps: nil,
+            scenario_latency_ms: %{},
+            dynamic_concurrency: false,
+            preflight_s: 5,
+            preflight_concurrency: 25,
+            max_concurrency: nil
 
   def load do
     http_version = normalize_http_version(env("BENCH_HTTP_VERSION", "http1"))
@@ -53,16 +59,22 @@ defmodule Bench.Config do
       http_version: http_version,
       duration_s: env_int("BENCH_DURATION", 30),
       warmup_s: env_int("BENCH_WARMUP", 5),
-      concurrency: env_int("BENCH_CONCURRENCY", 100),
-      pool_size: env_int("BENCH_POOL_SIZE", 50),
-      pool_count: env_int("BENCH_POOL_COUNT", default_pool_count()),
+      concurrency: env_int("BENCH_CONCURRENCY", 25),
+      pool_size: env_int("BENCH_POOL_SIZE", 200),
+      pool_count: env_int("BENCH_POOL_COUNT", 32),
       gun_conns: env_int("BENCH_GUN_CONNS", 4),
       request_timeout_ms: env_int("BENCH_REQUEST_TIMEOUT_MS", 30_000),
       tls_verify: tls_verify,
       ddskerl_error: env_float("BENCH_DDSKERL_ERROR", 0.01),
       ddskerl_bound: env_int("BENCH_DDSKERL_BOUND", 2048),
       echo_bytes: env_int("BENCH_ECHO_BYTES", 1024),
-      delay_ms: env_int("BENCH_DELAY_MS", 100)
+      delay_ms: env_int("BENCH_DELAY_MS", 100),
+      target_rps: env_float_optional("BENCH_TARGET_RPS"),
+      scenario_latency_ms: env_latency_map("BENCH_SCENARIO_LATENCY_MS"),
+      dynamic_concurrency: env_bool("BENCH_DYNAMIC_CONCURRENCY", false),
+      preflight_s: env_int("BENCH_PREFLIGHT_S", 5),
+      preflight_concurrency: env_int("BENCH_PREFLIGHT_CONCURRENCY", 25),
+      max_concurrency: env_int_optional("BENCH_MAX_CONCURRENCY")
     }
 
     scenario_names = env_list("BENCH_SCENARIOS")
@@ -71,6 +83,7 @@ defmodule Bench.Config do
     scenarios =
       config
       |> default_scenarios()
+      |> apply_latency_overrides(config)
       |> filter_scenarios(scenario_names)
 
     client_ids =
@@ -115,13 +128,15 @@ defmodule Bench.Config do
         name: "delay",
         method: :get,
         path: "/delay/#{delay_ms}",
-        response_bytes: 0
+        response_bytes: 0,
+        expected_latency_ms: delay_ms
       },
       %Scenario{
         name: "delay_var",
         method: :get,
         path: "/delay_var",
-        response_bytes: 0
+        response_bytes: 0,
+        expected_latency_ms: 110
       },
       %Scenario{
         name: "delay_post",
@@ -129,9 +144,23 @@ defmodule Bench.Config do
         path: "/delay_post",
         headers: [{"content-type", "application/json"}],
         body: @json_32k,
-        response_bytes: byte_size(@json_32k)
+        response_bytes: byte_size(@json_32k),
+        expected_latency_ms: 110
       }
     ]
+  end
+
+  defp apply_latency_overrides(scenarios, %__MODULE__{scenario_latency_ms: overrides}) do
+    if overrides == %{} do
+      scenarios
+    else
+      Enum.map(scenarios, fn scenario ->
+        case Map.fetch(overrides, scenario.name) do
+          {:ok, latency} -> %{scenario | expected_latency_ms: latency}
+          :error -> scenario
+        end
+      end)
+    end
   end
 
   defp filter_scenarios(scenarios, []), do: scenarios
@@ -181,6 +210,38 @@ defmodule Bench.Config do
     end
   end
 
+  defp env_float_optional(key) do
+    case System.get_env(key) do
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      value ->
+        case Float.parse(value) do
+          {float, _} when float > 0 -> float
+          _ -> nil
+        end
+    end
+  end
+
+  defp env_int_optional(key) do
+    case System.get_env(key) do
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      value ->
+        case Integer.parse(value) do
+          {int, _} when int > 0 -> int
+          _ -> nil
+        end
+    end
+  end
+
   defp env_list(key) do
     case System.get_env(key) do
       nil ->
@@ -201,6 +262,44 @@ defmodule Bench.Config do
       nil -> default
       "" -> default
       value -> value in ["1", "true", "TRUE", "yes", "YES"]
+    end
+  end
+
+  defp env_latency_map(key) do
+    case System.get_env(key) do
+      nil ->
+        %{}
+
+      "" ->
+        %{}
+
+      value ->
+        value
+        |> String.split(",", trim: true)
+        |> Enum.reduce(%{}, fn entry, acc ->
+          case String.split(entry, ":", parts: 2) do
+            [name, latency_raw] ->
+              latency = parse_latency(latency_raw)
+
+              if latency > 0 do
+                Map.put(acc, String.trim(name), latency)
+              else
+                acc
+              end
+
+            _ ->
+              acc
+          end
+        end)
+    end
+  end
+
+  defp parse_latency(value) do
+    value = String.trim(value)
+
+    case Float.parse(value) do
+      {latency, _} -> latency
+      :error -> 0.0
     end
   end
 
@@ -230,16 +329,4 @@ defmodule Bench.Config do
     end
   end
 
-  defp default_pool_count do
-    case :erlang.system_info(:logical_processors_available) do
-      count when is_integer(count) and count > 0 ->
-        count
-
-      _ ->
-        case :erlang.system_info(:schedulers_online) do
-          count when is_integer(count) and count > 0 -> count
-          _ -> System.schedulers_online()
-        end
-    end
-  end
 end

@@ -6,5 +6,6 @@ defmodule Bench.Scenario do
             path: "/",
             headers: [],
             body: nil,
-            response_bytes: 0
+            response_bytes: 0,
+            expected_latency_ms: nil
 end

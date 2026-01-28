@@ -53,7 +53,13 @@ defmodule Bench.ResultWriter do
         request_timeout_ms: config.request_timeout_ms,
         tls_verify: config.tls_verify,
         ddskerl_error: config.ddskerl_error,
-        ddskerl_bound: config.ddskerl_bound
+        ddskerl_bound: config.ddskerl_bound,
+        target_rps: config.target_rps,
+        scenario_latency_ms: config.scenario_latency_ms,
+        dynamic_concurrency: config.dynamic_concurrency,
+        preflight_s: config.preflight_s,
+        preflight_concurrency: config.preflight_concurrency,
+        max_concurrency: config.max_concurrency
       },
       finch: %{
         source: System.get_env("BENCH_FINCH_SOURCE") || "git",
