@@ -4,6 +4,9 @@ defmodule Bench.Config do
   alias Bench.ClientRegistry
   alias Bench.Scenario
 
+  @json_32k Path.expand("../../../../infra/server/static/json_32k.json", __DIR__)
+            |> File.read!()
+
   defstruct server_host: "localhost",
             server_port: 8080,
             scheme: "http",
@@ -84,7 +87,6 @@ defmodule Bench.Config do
 
   defp default_scenarios(%__MODULE__{echo_bytes: echo_bytes, delay_ms: delay_ms}) do
     body = :binary.copy("a", echo_bytes)
-    json_32k = json_payload(32_768)
 
     [
       %Scenario{name: "health", method: :get, path: "/health", response_bytes: 2},
@@ -118,8 +120,8 @@ defmodule Bench.Config do
         method: :post,
         path: "/delay_post/{ms}",
         headers: [{"content-type", "application/json"}],
-        body: json_32k,
-        response_bytes: 32_768,
+        body: @json_32k,
+        response_bytes: byte_size(@json_32k),
         delay_range_ms: {20, 200}
       }
     ]
@@ -209,14 +211,6 @@ defmodule Bench.Config do
   defp default_results_dir do
     timestamp = Calendar.strftime(DateTime.utc_now(), "%Y-%m-%dT%H%M%SZ")
     Path.expand("../results/#{timestamp}", File.cwd!())
-  end
-
-  defp json_payload(target_bytes) when is_integer(target_bytes) and target_bytes > 0 do
-    prefix = "{\"payload\":\""
-    suffix = "\"}"
-    overhead = byte_size(prefix) + byte_size(suffix)
-    payload_size = max(target_bytes - overhead, 0)
-    prefix <> String.duplicate("a", payload_size) <> suffix
   end
 
   defp default_pool_count do
