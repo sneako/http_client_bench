@@ -198,14 +198,14 @@ defmodule Bench.Runner do
 
       config.dynamic_concurrency ->
         preflight = preflight_scenarios(client_module, state, config, scenarios)
-        max_rps =
-          preflight
-          |> Map.values()
-          |> Enum.map(& &1.rps)
-          |> Enum.max(fn -> 0.0 end)
-
         Enum.into(scenarios, %{}, fn scenario ->
-          {scenario.name, compute_concurrency(config, scenario, max_rps, preflight, true)}
+          case Map.get(preflight, scenario.name) do
+            %{concurrency: concurrency} ->
+              {scenario.name, cap_concurrency(config, concurrency)}
+
+            _ ->
+              {scenario.name, config.concurrency}
+          end
         end)
 
       true ->
@@ -251,6 +251,102 @@ defmodule Bench.Runner do
         concurrency
       end
 
+    cap_concurrency(config, concurrency)
+  end
+
+  defp preflight_scenarios(client_module, state, config, scenarios) do
+    preflight_ms = max(config.preflight_s, 1) * 1000
+    warmup_ms = max(config.preflight_warmup_s, 0) * 1000
+    concurrencies =
+      case config.preflight_concurrencies do
+        [] -> [max(config.preflight_concurrency, 1)]
+        list -> list
+      end
+
+    Enum.reduce(scenarios, %{}, fn scenario, acc ->
+      best =
+        Enum.reduce(concurrencies, nil, fn concurrency, best ->
+          log_info(
+            "Preflight #{client_module.id()} scenario #{scenario.name} (concurrency=#{concurrency})"
+          )
+
+          if warmup_ms > 0 do
+            run_phase(
+              warmup_ms,
+              config.request_timeout_ms,
+              concurrency,
+              client_module,
+              state,
+              scenario,
+              nil
+            )
+          end
+
+          metrics = Metrics.new(config)
+          start_us = System.monotonic_time(:microsecond)
+
+          run_phase(
+            preflight_ms,
+            config.request_timeout_ms,
+            concurrency,
+            client_module,
+            state,
+            scenario,
+            metrics
+          )
+
+          end_us = System.monotonic_time(:microsecond)
+          elapsed_s = max(end_us - start_us, 0) / 1_000_000
+          snapshot = Metrics.snapshot(metrics)
+          rps = if elapsed_s > 0, do: snapshot.total / elapsed_s, else: 0.0
+
+          candidate = %{
+            concurrency: concurrency,
+            rps: rps,
+            mean_us: snapshot.mean,
+            errors: snapshot.errors
+          }
+
+          log_info(
+            "Preflight result #{client_module.id()} scenario #{scenario.name} " <>
+              "concurrency=#{concurrency} rps=#{format_float(rps)} errors=#{snapshot.errors}"
+          )
+
+          choose_best(candidate, best)
+        end)
+
+      Map.put(acc, scenario.name, best)
+    end)
+  end
+
+  defp choose_best(candidate, nil), do: candidate
+
+  defp choose_best(candidate, best) do
+    cond do
+      best.errors == 0 and candidate.errors == 0 ->
+        if candidate.rps >= best.rps, do: candidate, else: best
+
+      best.errors == 0 ->
+        best
+
+      candidate.errors == 0 ->
+        candidate
+
+      candidate.errors < best.errors ->
+        candidate
+
+      candidate.errors > best.errors ->
+        best
+
+      candidate.rps >= best.rps ->
+        candidate
+
+      true ->
+        best
+    end
+  end
+
+  defp cap_concurrency(config, concurrency) do
     case config.max_concurrency do
       max_concurrency when is_integer(max_concurrency) and max_concurrency > 0 ->
         min(concurrency, max_concurrency)
@@ -258,36 +354,5 @@ defmodule Bench.Runner do
       _ ->
         concurrency
     end
-  end
-
-  defp preflight_scenarios(client_module, state, config, scenarios) do
-    preflight_ms = max(config.preflight_s, 1) * 1000
-    preflight_concurrency = max(config.preflight_concurrency, 1)
-
-    Enum.reduce(scenarios, %{}, fn scenario, acc ->
-      log_info(
-        "Preflight #{client_module.id()} scenario #{scenario.name} (concurrency=#{preflight_concurrency})"
-      )
-
-      metrics = Metrics.new(config)
-      start_us = System.monotonic_time(:microsecond)
-
-      run_phase(
-        preflight_ms,
-        config.request_timeout_ms,
-        preflight_concurrency,
-        client_module,
-        state,
-        scenario,
-        metrics
-      )
-
-      end_us = System.monotonic_time(:microsecond)
-      elapsed_s = max(end_us - start_us, 0) / 1_000_000
-      snapshot = Metrics.snapshot(metrics)
-      rps = if elapsed_s > 0, do: snapshot.total / elapsed_s, else: 0.0
-
-      Map.put(acc, scenario.name, %{rps: rps, mean_us: snapshot.mean})
-    end)
   end
 end

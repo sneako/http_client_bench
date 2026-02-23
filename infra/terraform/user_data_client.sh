@@ -25,7 +25,8 @@ apt-get install -y --no-install-recommends \
   xsltproc \
   fop \
   libxslt1-dev \
-  libcurl4-openssl-dev
+  libcurl4-openssl-dev \
+  pkg-config
 
 cat >/etc/profile.d/99-finch-bench.sh <<'ENVVARS'
 if [[ -z "$${MIX_OS_DEPS_COMPILE_PARTITION_COUNT:-}" ]]; then

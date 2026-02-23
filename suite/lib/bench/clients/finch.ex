@@ -14,7 +14,7 @@ defmodule Bench.Clients.Finch do
     name = BenchFinch
     pool_opts = [size: config.pool_size, count: config.pool_count]
     pool_opts = maybe_set_protocols(pool_opts, config)
-    pool_opts = maybe_set_conn_opts(pool_opts, config)
+    pool_opts = put_conn_opts(pool_opts, config)
     pools = %{default: pool_opts}
     child = {Finch, name: name, pools: pools}
 
@@ -66,10 +66,13 @@ defmodule Bench.Clients.Finch do
 
   defp maybe_set_protocols(pool_opts, _config), do: pool_opts
 
-  defp maybe_set_conn_opts(pool_opts, %Config{scheme: "https", tls_verify: false}) do
-    conn_opts = [transport_opts: [verify: :verify_none]]
+  defp put_conn_opts(pool_opts, %Config{scheme: "https", tls_verify: false}) do
+    conn_opts = [transport_opts: [nodelay: true, verify: :verify_none]]
     Keyword.put(pool_opts, :conn_opts, conn_opts)
   end
 
-  defp maybe_set_conn_opts(pool_opts, _config), do: pool_opts
+  defp put_conn_opts(pool_opts, _config) do
+    conn_opts = [transport_opts: [nodelay: true]]
+    Keyword.put(pool_opts, :conn_opts, conn_opts)
+  end
 end

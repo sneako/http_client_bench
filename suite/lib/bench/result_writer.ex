@@ -7,7 +7,7 @@ defmodule Bench.ResultWriter do
   def write(results, config) do
     File.mkdir_p!(config.result_dir)
 
-    summary = Enum.map(results, &summary_row/1)
+    summary = Enum.map(results, &summary_row(&1, config))
     metadata = metadata(config)
 
     File.write!(Path.join(config.result_dir, "summary.csv"), summary_csv(summary))
@@ -17,10 +17,12 @@ defmodule Bench.ResultWriter do
     :ok
   end
 
-  defp summary_row(%Result{} = result) do
+  defp summary_row(%Result{} = result, config) do
     %{
       client: result.client,
       scenario: result.scenario,
+      pool_size: config.pool_size,
+      pool_count: config.pool_count,
       requests: result.requests,
       errors: result.errors,
       duration_seconds: result.duration_s,
@@ -58,7 +60,9 @@ defmodule Bench.ResultWriter do
         scenario_latency_ms: config.scenario_latency_ms,
         dynamic_concurrency: config.dynamic_concurrency,
         preflight_s: config.preflight_s,
+        preflight_warmup_s: config.preflight_warmup_s,
         preflight_concurrency: config.preflight_concurrency,
+        preflight_concurrencies: config.preflight_concurrencies,
         max_concurrency: config.max_concurrency
       },
       finch: %{
@@ -91,6 +95,8 @@ defmodule Bench.ResultWriter do
     header = [
       "client",
       "scenario",
+      "pool_size",
+      "pool_count",
       "requests",
       "errors",
       "duration_seconds",
@@ -112,6 +118,8 @@ defmodule Bench.ResultWriter do
     [
       row.client,
       row.scenario,
+      row.pool_size,
+      row.pool_count,
       row.requests,
       row.errors,
       row.duration_seconds,

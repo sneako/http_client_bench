@@ -5,9 +5,15 @@ defmodule Bench.Config do
   alias Bench.Scenario
 
   @static_dir Path.expand("../../../infra/server/static", __DIR__)
+  @default_excluded_scenarios ["large", "stream"]
 
   @json_32k Path.join(@static_dir, "json_32k.json")
             |> File.read!()
+
+  @rtb_req_1530 Path.join(@static_dir, "rtb_req_1530.json")
+                |> File.read!()
+
+  @rtb_resp_8779_bytes 8779
 
   @echo_payloads %{
     1024 => Path.join(@static_dir, "echo_1024.bin") |> File.read!(),
@@ -39,7 +45,9 @@ defmodule Bench.Config do
             scenario_latency_ms: %{},
             dynamic_concurrency: false,
             preflight_s: 5,
+            preflight_warmup_s: 1,
             preflight_concurrency: 25,
+            preflight_concurrencies: [],
             max_concurrency: nil
 
   def load do
@@ -73,8 +81,17 @@ defmodule Bench.Config do
       scenario_latency_ms: env_latency_map("BENCH_SCENARIO_LATENCY_MS"),
       dynamic_concurrency: env_bool("BENCH_DYNAMIC_CONCURRENCY", false),
       preflight_s: env_int("BENCH_PREFLIGHT_S", 5),
+      preflight_warmup_s: env_int("BENCH_PREFLIGHT_WARMUP_S", 1),
       preflight_concurrency: env_int("BENCH_PREFLIGHT_CONCURRENCY", 25),
       max_concurrency: env_int_optional("BENCH_MAX_CONCURRENCY")
+    }
+
+    preflight_concurrencies = env_list_int("BENCH_PREFLIGHT_CONCURRENCIES", [])
+
+    config = %__MODULE__{
+      config
+      | preflight_concurrencies:
+          default_preflight_concurrencies(config, preflight_concurrencies)
     }
 
     scenario_names = env_list("BENCH_SCENARIOS")
@@ -84,7 +101,7 @@ defmodule Bench.Config do
       config
       |> default_scenarios()
       |> apply_latency_overrides(config)
-      |> filter_scenarios(scenario_names)
+      |> select_scenarios(scenario_names)
 
     client_ids =
       case client_names do
@@ -146,6 +163,14 @@ defmodule Bench.Config do
         body: @json_32k,
         response_bytes: byte_size(@json_32k),
         expected_latency_ms: 110
+      },
+      %Scenario{
+        name: "rtb_mix",
+        method: :post,
+        path: "/rtb_mix",
+        headers: [{"content-type", "application/json"}],
+        body: @rtb_req_1530,
+        response_bytes: trunc(@rtb_resp_8779_bytes * 0.1756)
       }
     ]
   end
@@ -169,6 +194,14 @@ defmodule Bench.Config do
   defp filter_scenarios(scenarios, names) do
     Enum.filter(scenarios, fn scenario -> scenario.name in names end)
   end
+
+  defp select_scenarios(scenarios, []) do
+    Enum.reject(scenarios, &(&1.name in @default_excluded_scenarios))
+  end
+
+  defp select_scenarios(scenarios, ["all"]), do: scenarios
+
+  defp select_scenarios(scenarios, names), do: filter_scenarios(scenarios, names)
 
   defp env(key, default) do
     case System.get_env(key) do
@@ -239,6 +272,68 @@ defmodule Bench.Config do
           {int, _} when int > 0 -> int
           _ -> nil
         end
+    end
+  end
+
+  defp env_list_int(key, default) do
+    case System.get_env(key) do
+      nil ->
+        default
+
+      "" ->
+        default
+
+      value ->
+        values =
+          value
+          |> String.split(",", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&parse_int/1)
+          |> Enum.filter(&(&1 > 0))
+          |> uniq_preserve_order()
+
+        if values == [], do: default, else: values
+    end
+  end
+
+  defp parse_int(value) do
+    case Integer.parse(value) do
+      {int, _} -> int
+      :error -> 0
+    end
+  end
+
+  defp uniq_preserve_order(list) do
+    Enum.reduce(list, [], fn item, acc ->
+      if item in acc, do: acc, else: acc ++ [item]
+    end)
+  end
+
+  defp default_preflight_concurrencies(config, overrides) do
+    if overrides != [] do
+      overrides
+    else
+      base = max(config.preflight_concurrency, 1)
+      candidates = [base, base * 2, base * 4, base * 8]
+
+      candidates =
+        case config.max_concurrency do
+          max_concurrency when is_integer(max_concurrency) and max_concurrency > 0 ->
+            capped = Enum.filter(candidates, &(&1 <= max_concurrency))
+
+            if max_concurrency in capped do
+              capped
+            else
+              capped ++ [max_concurrency]
+            end
+
+          _ ->
+            candidates
+        end
+
+      candidates
+      |> uniq_preserve_order()
+      |> Enum.sort()
     end
   end
 

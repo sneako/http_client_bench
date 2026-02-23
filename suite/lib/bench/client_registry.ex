@@ -4,7 +4,8 @@ defmodule Bench.ClientRegistry do
   @clients [
     {:finch, Bench.Clients.Finch},
     {:hackney, Bench.Clients.Hackney},
-    {:gun, Bench.Clients.Gun}
+    {:gun, Bench.Clients.Gun},
+    {:buoy, Bench.Clients.Buoy}
   ]
 
   def all_ids do

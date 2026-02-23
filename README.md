@@ -22,6 +22,12 @@ This repository contains the automated benchmark infrastructure and suite for Fi
 ./bin/bench-run
 ```
 
+2b) Run the Rust benchmark harness (reqwest only):
+
+```
+./bin/bench-run-rust
+```
+
 3) Tear down infrastructure:
 
 ```
@@ -62,6 +68,9 @@ BENCH_TUNE=1 ./bin/bench-run
 
 # Compare multiple Finch versions in a single run.
 BENCH_FINCH_MATRIX=path,git:main,hex:0.19.2 ./bin/bench-run
+
+# Run Rust reqwest harness with higher concurrency.
+BENCH_CONCURRENCY=200 ./bin/bench-run-rust
 ```
 
 ## Tuning Finch Pools
@@ -92,7 +101,7 @@ Infrastructure:
 - `BENCH_TLS_PORT` (default 8443)
 
 Benchmark run configuration:
-- `BENCH_CLIENTS` (default `finch,hackney,gun` or `all`)
+- `BENCH_CLIENTS` (default `finch,hackney,gun,buoy` or `all`)
 - `BENCH_SCENARIOS` (default all): comma-separated scenario names
 - `BENCH_DURATION` (seconds, default 30)
 - `BENCH_WARMUP` (seconds, default 5)
@@ -107,9 +116,11 @@ Benchmark run configuration:
 - `BENCH_DELAY_MS` (default 100)
 - `BENCH_TARGET_RPS` (optional; when set and a scenario has an expected latency, concurrency becomes `ceil(target_rps * latency_ms / 1000)`)
 - `BENCH_SCENARIO_LATENCY_MS` (optional; override expected latency per scenario, e.g. `delay:100,delay_var:110`)
-- `BENCH_DYNAMIC_CONCURRENCY` (optional; when set, run a short preflight per scenario and increase concurrency based on observed max RPS)
+- `BENCH_DYNAMIC_CONCURRENCY` (optional; when set, run a short preflight sweep per scenario and pick the best concurrency by RPS)
 - `BENCH_PREFLIGHT_S` (seconds, default 5)
+- `BENCH_PREFLIGHT_WARMUP_S` (seconds, default 1)
 - `BENCH_PREFLIGHT_CONCURRENCY` (default 25)
+- `BENCH_PREFLIGHT_CONCURRENCIES` (optional override list, e.g. `25,50,100,200`; defaults to `preflight_concurrency * 1,2,4,8` and includes `BENCH_MAX_CONCURRENCY` if set)
 - `BENCH_MAX_CONCURRENCY` (optional cap for auto-computed concurrency)
 - `BENCH_TUNE` (set to enable Finch pool size/count tuning)
 - `BENCH_TUNE_POOL_SIZES` (optional, comma-separated; defaults to `50,100,200`)
@@ -121,6 +132,17 @@ Finch version selection:
 - `BENCH_FINCH_GIT` (git URL override)
 - `BENCH_FINCH_VERSION` (hex version when using `hex`)
 - `BENCH_FINCH_MATRIX` (comma-separated, e.g. `path,git:main,hex:0.19.2`)
+
+Rust harness:
+- `./bin/bench-run-rust` runs the Rust reqwest client against the same server endpoints.
+- Uses the same `BENCH_*` runtime env vars for scenario selection and timing.
+- `BENCH_RUST_CLIENTS` (comma-separated, or `all`; defaults to `reqwest,hyper`)
+- Rust harness defaults to `BENCH_CONCURRENCY=100` if unset.
+- Reqwest tuning:
+  - `BENCH_REQWEST_POOL_MAX_IDLE_PER_HOST` (default = concurrency)
+  - `BENCH_REQWEST_CONNECT_TIMEOUT_MS` (optional)
+  - `BENCH_REQWEST_TCP_NODELAY` (optional boolean)
+  - `BENCH_REQWEST_HTTP2_ADAPTIVE_WINDOW` (optional boolean)
 
 ## Server Endpoints
 
@@ -136,6 +158,7 @@ The OpenResty server provides deterministic endpoints:
 - `/delay/<ms>` sleeps for `<ms>` milliseconds before responding
 - `/delay_var` sleeps for a random 20–200ms before responding
 - `/delay_post` sleeps for a random 20–200ms; accepts a JSON body and returns a 32KB JSON response 10% of the time
+- `/rtb_mix` accepts a ~1.5KB JSON POST body and returns `204` about 82.4% of the time, otherwise a ~8.8KB JSON payload
 
 These are configured in `infra/server/openresty.conf`.
 
@@ -148,3 +171,6 @@ The suite uses the endpoints above with fixed names. For the delay tests:
 - `delay` uses the fixed value from `BENCH_DELAY_MS` (default 100ms)
 - `delay_var` uses server-side random delays between 20–200ms
 - `delay_post` sends a 32KB JSON body and the server randomly returns a 32KB JSON response 10% of the time (20–200ms delay)
+- `rtb_mix` sends a 1530-byte JSON body and receives either `204` (~82.4%) or a static 8779-byte JSON payload (~17.6%), modeled from `ash-worker-2026.pcap`
+
+By default, the `large` and `stream` scenarios are omitted. Use `BENCH_SCENARIOS=all` or explicitly list them to include them.
