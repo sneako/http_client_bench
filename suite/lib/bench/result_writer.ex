@@ -22,7 +22,7 @@ defmodule Bench.ResultWriter do
       client: result.client,
       scenario: result.scenario,
       pool_size: config.pool_size,
-      pool_count: config.pool_count,
+      pool_count: summary_pool_count(result, config),
       requests: result.requests,
       errors: result.errors,
       duration_seconds: result.duration_s,
@@ -51,6 +51,7 @@ defmodule Bench.ResultWriter do
         scenarios: Enum.map(config.scenarios, & &1.name),
         pool_size: config.pool_size,
         pool_count: config.pool_count,
+        finch_effective_pool_count: finch_effective_pool_count(config),
         gun_conns: config.gun_conns,
         pool_timeout_ms: config.pool_timeout_ms,
         request_timeout_ms: config.request_timeout_ms,
@@ -134,6 +135,19 @@ defmodule Bench.ResultWriter do
     ]
     |> Enum.map(&format_field/1)
   end
+
+  defp summary_pool_count(%Result{client: :finch}, config), do: finch_effective_pool_count(config)
+  defp summary_pool_count(_result, config), do: config.pool_count
+
+  defp finch_effective_pool_count(%{
+         http_version: "http2",
+         pool_size: pool_size,
+         pool_count: pool_count
+       }) do
+    max(pool_count, pool_size)
+  end
+
+  defp finch_effective_pool_count(%{pool_count: pool_count}), do: pool_count
 
   defp to_ms(nil), do: nil
   defp to_ms(value), do: value / 1000

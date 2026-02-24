@@ -12,7 +12,7 @@ defmodule Bench.Clients.Finch do
   @impl true
   def setup(%Config{} = config) do
     name = BenchFinch
-    pool_opts = [size: config.pool_size, count: config.pool_count]
+    pool_opts = [size: config.pool_size, count: effective_pool_count(config)]
     pool_opts = maybe_set_protocols(pool_opts, config)
     pool_opts = put_conn_opts(pool_opts, config)
     pools = %{default: pool_opts}
@@ -68,6 +68,16 @@ defmodule Bench.Clients.Finch do
   end
 
   defp maybe_set_protocols(pool_opts, _config), do: pool_opts
+
+  defp effective_pool_count(%Config{
+         http_version: "http2",
+         pool_size: pool_size,
+         pool_count: pool_count
+       }) do
+    max(pool_count, pool_size)
+  end
+
+  defp effective_pool_count(%Config{pool_count: pool_count}), do: pool_count
 
   defp put_conn_opts(pool_opts, %Config{scheme: "https", tls_verify: false}) do
     conn_opts = [transport_opts: [nodelay: true, verify: :verify_none]]

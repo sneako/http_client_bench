@@ -107,6 +107,7 @@ Benchmark run configuration:
 - `BENCH_WARMUP` (seconds, default 5)
 - `BENCH_CONCURRENCY` (default 25)
 - `BENCH_POOL_SIZE`, `BENCH_POOL_COUNT` (Finch/Hackney pooling; defaults 200/32)
+  Finch HTTP/2 note: Finch ignores `pool_size` for HTTP/2 connection count, so the suite uses `max(BENCH_POOL_SIZE, BENCH_POOL_COUNT)` as Finch's effective pool count.
 - `BENCH_GUN_CONNS` (Gun connection count)
 - `BENCH_POOL_TIMEOUT_MS` (Finch pool checkout timeout, default 30000)
 - `BENCH_REQUEST_TIMEOUT_MS` (default 30000)
