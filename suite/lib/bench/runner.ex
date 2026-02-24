@@ -27,6 +27,7 @@ defmodule Bench.Runner do
             scenario_results =
               Enum.map(config.scenarios, fn scenario ->
                 concurrency = Map.get(scenario_concurrency, scenario.name, config.concurrency)
+
                 log_info(
                   "Running #{client_module.id()} scenario #{scenario.name} (concurrency=#{concurrency})"
                 )
@@ -61,6 +62,8 @@ defmodule Bench.Runner do
     duration_ms = config.duration_s * 1000
 
     if warmup_ms > 0 do
+      warmup_metrics = Metrics.new(config)
+
       run_phase(
         warmup_ms,
         config.request_timeout_ms,
@@ -68,7 +71,18 @@ defmodule Bench.Runner do
         client_module,
         state,
         scenario,
-        nil
+        warmup_metrics
+      )
+
+      warmup_snapshot = Metrics.snapshot(warmup_metrics)
+      warmup_requests = warmup_snapshot.total + warmup_snapshot.errors
+
+      warmup_error_suffix =
+        format_error_reason_suffix(warmup_snapshot.errors, warmup_snapshot.error_reasons)
+
+      log_info(
+        "Warmup #{client_module.id()} scenario #{scenario.name}: " <>
+          "requests=#{warmup_requests} errors=#{warmup_snapshot.errors}#{warmup_error_suffix}"
       )
     end
 
@@ -171,12 +185,15 @@ defmodule Bench.Runner do
   end
 
   defp log_result(%Result{} = result) do
+    error_suffix = format_error_reason_suffix(result.errors, result.error_reasons)
+
     log_info(
       "Completed #{result.client} scenario #{result.scenario}: " <>
+        "requests=#{result.requests} " <>
         "rps=#{format_float(result.rps)} " <>
         "errors=#{result.errors} " <>
         "p50_ms=#{format_us(result.p50_us)} " <>
-        "p99_ms=#{format_us(result.p99_us)}"
+        "p99_ms=#{format_us(result.p99_us)}#{error_suffix}"
     )
   end
 
@@ -198,6 +215,7 @@ defmodule Bench.Runner do
 
       config.dynamic_concurrency ->
         preflight = preflight_scenarios(client_module, state, config, scenarios)
+
         Enum.into(scenarios, %{}, fn scenario ->
           case Map.get(preflight, scenario.name) do
             %{concurrency: concurrency} ->
@@ -257,6 +275,7 @@ defmodule Bench.Runner do
   defp preflight_scenarios(client_module, state, config, scenarios) do
     preflight_ms = max(config.preflight_s, 1) * 1000
     warmup_ms = max(config.preflight_warmup_s, 0) * 1000
+
     concurrencies =
       case config.preflight_concurrencies do
         [] -> [max(config.preflight_concurrency, 1)]
@@ -271,6 +290,8 @@ defmodule Bench.Runner do
           )
 
           if warmup_ms > 0 do
+            warmup_metrics = Metrics.new(config)
+
             run_phase(
               warmup_ms,
               config.request_timeout_ms,
@@ -278,7 +299,19 @@ defmodule Bench.Runner do
               client_module,
               state,
               scenario,
-              nil
+              warmup_metrics
+            )
+
+            warmup_snapshot = Metrics.snapshot(warmup_metrics)
+            warmup_requests = warmup_snapshot.total + warmup_snapshot.errors
+
+            warmup_error_suffix =
+              format_error_reason_suffix(warmup_snapshot.errors, warmup_snapshot.error_reasons)
+
+            log_info(
+              "Preflight warmup #{client_module.id()} scenario #{scenario.name} " <>
+                "concurrency=#{concurrency} requests=#{warmup_requests} " <>
+                "errors=#{warmup_snapshot.errors}#{warmup_error_suffix}"
             )
           end
 
@@ -298,7 +331,9 @@ defmodule Bench.Runner do
           end_us = System.monotonic_time(:microsecond)
           elapsed_s = max(end_us - start_us, 0) / 1_000_000
           snapshot = Metrics.snapshot(metrics)
+          requests = snapshot.total + snapshot.errors
           rps = if elapsed_s > 0, do: snapshot.total / elapsed_s, else: 0.0
+          error_suffix = format_error_reason_suffix(snapshot.errors, snapshot.error_reasons)
 
           candidate = %{
             concurrency: concurrency,
@@ -309,11 +344,19 @@ defmodule Bench.Runner do
 
           log_info(
             "Preflight result #{client_module.id()} scenario #{scenario.name} " <>
-              "concurrency=#{concurrency} rps=#{format_float(rps)} errors=#{snapshot.errors}"
+              "concurrency=#{concurrency} requests=#{requests} " <>
+              "rps=#{format_float(rps)} errors=#{snapshot.errors}#{error_suffix}"
           )
 
           choose_best(candidate, best)
         end)
+
+      if best do
+        log_info(
+          "Preflight selected #{client_module.id()} scenario #{scenario.name} " <>
+            "concurrency=#{best.concurrency} rps=#{format_float(best.rps)} errors=#{best.errors}"
+        )
+      end
 
       Map.put(acc, scenario.name, best)
     end)
@@ -353,6 +396,23 @@ defmodule Bench.Runner do
 
       _ ->
         concurrency
+    end
+  end
+
+  defp format_error_reason_suffix(errors, _error_reasons) when errors <= 0, do: ""
+
+  defp format_error_reason_suffix(_errors, error_reasons) do
+    formatted =
+      error_reasons
+      |> Enum.sort_by(fn {_reason, count} -> -count end)
+      |> Enum.take(3)
+      |> Enum.map(fn {reason, count} -> "#{inspect(reason)}=#{count}" end)
+      |> Enum.join(", ")
+
+    if formatted == "" do
+      ""
+    else
+      " top_errors=[#{formatted}]"
     end
   end
 end

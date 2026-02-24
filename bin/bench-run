@@ -130,6 +130,7 @@ run_remote_bench() {
   [[ -n "${BENCH_POOL_SIZE:-}" ]] && env_vars+=("BENCH_POOL_SIZE=${BENCH_POOL_SIZE}")
   [[ -n "${BENCH_POOL_COUNT:-}" ]] && env_vars+=("BENCH_POOL_COUNT=${BENCH_POOL_COUNT}")
   [[ -n "${BENCH_GUN_CONNS:-}" ]] && env_vars+=("BENCH_GUN_CONNS=${BENCH_GUN_CONNS}")
+  [[ -n "${BENCH_POOL_TIMEOUT_MS:-}" ]] && env_vars+=("BENCH_POOL_TIMEOUT_MS=${BENCH_POOL_TIMEOUT_MS}")
   [[ -n "${BENCH_REQUEST_TIMEOUT_MS:-}" ]] && env_vars+=("BENCH_REQUEST_TIMEOUT_MS=${BENCH_REQUEST_TIMEOUT_MS}")
   [[ -n "${BENCH_TLS_VERIFY:-}" ]] && env_vars+=("BENCH_TLS_VERIFY=${BENCH_TLS_VERIFY}")
   [[ -n "${BENCH_DDSKERL_ERROR:-}" ]] && env_vars+=("BENCH_DDSKERL_ERROR=${BENCH_DDSKERL_ERROR}")

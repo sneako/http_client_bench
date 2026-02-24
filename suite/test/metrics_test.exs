@@ -7,7 +7,7 @@ defmodule Bench.MetricsTest do
 
     Bench.Metrics.record_ok(metrics, 1000)
     Bench.Metrics.record_ok(metrics, 2000)
-    Bench.Metrics.record_error(metrics)
+    Bench.Metrics.record_error(metrics, :test_error)
 
     snapshot = Bench.Metrics.snapshot(metrics)
 

@@ -36,7 +36,10 @@ defmodule Bench.Clients.Finch do
     req = Finch.build(scenario.method, url, scenario.headers, scenario.body)
 
     try do
-      Finch.request(req, state.name, receive_timeout: state.config.request_timeout_ms)
+      Finch.request(req, state.name,
+        pool_timeout: state.config.pool_timeout_ms,
+        receive_timeout: state.config.request_timeout_ms
+      )
     rescue
       exception -> {:error, exception}
     catch

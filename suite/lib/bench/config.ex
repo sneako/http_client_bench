@@ -35,6 +35,7 @@ defmodule Bench.Config do
             pool_size: 200,
             pool_count: 32,
             gun_conns: 4,
+            pool_timeout_ms: 30_000,
             request_timeout_ms: 30_000,
             tls_verify: false,
             ddskerl_error: 0.01,
@@ -71,6 +72,7 @@ defmodule Bench.Config do
       pool_size: env_int("BENCH_POOL_SIZE", 200),
       pool_count: env_int("BENCH_POOL_COUNT", 32),
       gun_conns: env_int("BENCH_GUN_CONNS", 4),
+      pool_timeout_ms: env_int("BENCH_POOL_TIMEOUT_MS", 30_000),
       request_timeout_ms: env_int("BENCH_REQUEST_TIMEOUT_MS", 30_000),
       tls_verify: tls_verify,
       ddskerl_error: env_float("BENCH_DDSKERL_ERROR", 0.01),
@@ -90,8 +92,7 @@ defmodule Bench.Config do
 
     config = %__MODULE__{
       config
-      | preflight_concurrencies:
-          default_preflight_concurrencies(config, preflight_concurrencies)
+      | preflight_concurrencies: default_preflight_concurrencies(config, preflight_concurrencies)
     }
 
     scenario_names = env_list("BENCH_SCENARIOS")
@@ -423,5 +424,4 @@ defmodule Bench.Config do
         raise "Unsupported BENCH_ECHO_BYTES=#{size}. Add a static payload under infra/server/static."
     end
   end
-
 end

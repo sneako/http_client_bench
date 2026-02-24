@@ -52,6 +52,7 @@ defmodule Bench.ResultWriter do
         pool_size: config.pool_size,
         pool_count: config.pool_count,
         gun_conns: config.gun_conns,
+        pool_timeout_ms: config.pool_timeout_ms,
         request_timeout_ms: config.request_timeout_ms,
         tls_verify: config.tls_verify,
         ddskerl_error: config.ddskerl_error,

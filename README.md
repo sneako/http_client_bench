@@ -108,6 +108,7 @@ Benchmark run configuration:
 - `BENCH_CONCURRENCY` (default 25)
 - `BENCH_POOL_SIZE`, `BENCH_POOL_COUNT` (Finch/Hackney pooling; defaults 200/32)
 - `BENCH_GUN_CONNS` (Gun connection count)
+- `BENCH_POOL_TIMEOUT_MS` (Finch pool checkout timeout, default 30000)
 - `BENCH_REQUEST_TIMEOUT_MS` (default 30000)
 - `BENCH_HTTP_VERSION` (`http1` or `http2`, default `http1`)
 - `BENCH_TLS_VERIFY` (`true`/`false`, default `false` when using HTTPS)
