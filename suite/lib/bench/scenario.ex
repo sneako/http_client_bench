@@ -7,5 +7,5 @@ defmodule Bench.Scenario do
             headers: [],
             body: nil,
             response_bytes: 0,
-            delay_range_ms: nil
+            expected_latency_ms: nil
 end

@@ -4,6 +4,24 @@ defmodule Bench.Config do
   alias Bench.ClientRegistry
   alias Bench.Scenario
 
+  @static_dir Path.expand("../../../infra/server/static", __DIR__)
+  @default_excluded_scenarios ["large", "stream"]
+
+  @json_32k Path.join(@static_dir, "json_32k.json")
+            |> File.read!()
+
+  @rtb_req_1530 Path.join(@static_dir, "rtb_req_1530.json")
+                |> File.read!()
+
+  @rtb_resp_8779_bytes 8779
+
+  @echo_payloads %{
+    1024 => Path.join(@static_dir, "echo_1024.bin") |> File.read!(),
+    4096 => Path.join(@static_dir, "small.bin") |> File.read!(),
+    131_072 => Path.join(@static_dir, "medium.bin") |> File.read!(),
+    1_048_576 => Path.join(@static_dir, "large.bin") |> File.read!()
+  }
+
   defstruct server_host: "localhost",
             server_port: 8080,
             scheme: "http",
@@ -14,15 +32,24 @@ defmodule Bench.Config do
             clients: [],
             scenarios: [],
             result_dir: nil,
-            pool_size: 50,
-            pool_count: 1,
+            pool_size: 200,
+            pool_count: 32,
             gun_conns: 4,
+            pool_timeout_ms: 30_000,
             request_timeout_ms: 30_000,
             tls_verify: false,
             ddskerl_error: 0.01,
             ddskerl_bound: 2048,
             echo_bytes: 1024,
-            delay_ms: 100
+            delay_ms: 100,
+            target_rps: nil,
+            scenario_latency_ms: %{},
+            dynamic_concurrency: false,
+            preflight_s: 5,
+            preflight_warmup_s: 1,
+            preflight_concurrency: 25,
+            preflight_concurrencies: [],
+            max_concurrency: nil
 
   def load do
     http_version = normalize_http_version(env("BENCH_HTTP_VERSION", "http1"))
@@ -41,16 +68,31 @@ defmodule Bench.Config do
       http_version: http_version,
       duration_s: env_int("BENCH_DURATION", 30),
       warmup_s: env_int("BENCH_WARMUP", 5),
-      concurrency: env_int("BENCH_CONCURRENCY", 100),
-      pool_size: env_int("BENCH_POOL_SIZE", 50),
-      pool_count: env_int("BENCH_POOL_COUNT", default_pool_count()),
+      concurrency: env_int("BENCH_CONCURRENCY", 25),
+      pool_size: env_int("BENCH_POOL_SIZE", 200),
+      pool_count: env_int("BENCH_POOL_COUNT", 32),
       gun_conns: env_int("BENCH_GUN_CONNS", 4),
+      pool_timeout_ms: env_int("BENCH_POOL_TIMEOUT_MS", 30_000),
       request_timeout_ms: env_int("BENCH_REQUEST_TIMEOUT_MS", 30_000),
       tls_verify: tls_verify,
       ddskerl_error: env_float("BENCH_DDSKERL_ERROR", 0.01),
       ddskerl_bound: env_int("BENCH_DDSKERL_BOUND", 2048),
       echo_bytes: env_int("BENCH_ECHO_BYTES", 1024),
-      delay_ms: env_int("BENCH_DELAY_MS", 100)
+      delay_ms: env_int("BENCH_DELAY_MS", 100),
+      target_rps: env_float_optional("BENCH_TARGET_RPS"),
+      scenario_latency_ms: env_latency_map("BENCH_SCENARIO_LATENCY_MS"),
+      dynamic_concurrency: env_bool("BENCH_DYNAMIC_CONCURRENCY", false),
+      preflight_s: env_int("BENCH_PREFLIGHT_S", 5),
+      preflight_warmup_s: env_int("BENCH_PREFLIGHT_WARMUP_S", 1),
+      preflight_concurrency: env_int("BENCH_PREFLIGHT_CONCURRENCY", 25),
+      max_concurrency: env_int_optional("BENCH_MAX_CONCURRENCY")
+    }
+
+    preflight_concurrencies = env_list_int("BENCH_PREFLIGHT_CONCURRENCIES", [])
+
+    config = %__MODULE__{
+      config
+      | preflight_concurrencies: default_preflight_concurrencies(config, preflight_concurrencies)
     }
 
     scenario_names = env_list("BENCH_SCENARIOS")
@@ -59,7 +101,8 @@ defmodule Bench.Config do
     scenarios =
       config
       |> default_scenarios()
-      |> filter_scenarios(scenario_names)
+      |> apply_latency_overrides(config)
+      |> select_scenarios(scenario_names)
 
     client_ids =
       case client_names do
@@ -83,8 +126,7 @@ defmodule Bench.Config do
   end
 
   defp default_scenarios(%__MODULE__{echo_bytes: echo_bytes, delay_ms: delay_ms}) do
-    body = :binary.copy("a", echo_bytes)
-    json_32k = json_payload(32_768)
+    body = echo_payload(echo_bytes)
 
     [
       %Scenario{name: "health", method: :get, path: "/health", response_bytes: 2},
@@ -104,25 +146,47 @@ defmodule Bench.Config do
         name: "delay",
         method: :get,
         path: "/delay/#{delay_ms}",
-        response_bytes: 0
+        response_bytes: 0,
+        expected_latency_ms: delay_ms
       },
       %Scenario{
         name: "delay_var",
         method: :get,
-        path: "/delay/{ms}",
+        path: "/delay_var",
         response_bytes: 0,
-        delay_range_ms: {20, 200}
+        expected_latency_ms: 110
       },
       %Scenario{
         name: "delay_post",
         method: :post,
-        path: "/delay_post/{ms}",
+        path: "/delay_post",
         headers: [{"content-type", "application/json"}],
-        body: json_32k,
-        response_bytes: 32_768,
-        delay_range_ms: {20, 200}
+        body: @json_32k,
+        response_bytes: byte_size(@json_32k),
+        expected_latency_ms: 110
+      },
+      %Scenario{
+        name: "rtb_mix",
+        method: :post,
+        path: "/rtb_mix",
+        headers: [{"content-type", "application/json"}],
+        body: @rtb_req_1530,
+        response_bytes: trunc(@rtb_resp_8779_bytes * 0.1756)
       }
     ]
+  end
+
+  defp apply_latency_overrides(scenarios, %__MODULE__{scenario_latency_ms: overrides}) do
+    if overrides == %{} do
+      scenarios
+    else
+      Enum.map(scenarios, fn scenario ->
+        case Map.fetch(overrides, scenario.name) do
+          {:ok, latency} -> %{scenario | expected_latency_ms: latency}
+          :error -> scenario
+        end
+      end)
+    end
   end
 
   defp filter_scenarios(scenarios, []), do: scenarios
@@ -131,6 +195,14 @@ defmodule Bench.Config do
   defp filter_scenarios(scenarios, names) do
     Enum.filter(scenarios, fn scenario -> scenario.name in names end)
   end
+
+  defp select_scenarios(scenarios, []) do
+    Enum.reject(scenarios, &(&1.name in @default_excluded_scenarios))
+  end
+
+  defp select_scenarios(scenarios, ["all"]), do: scenarios
+
+  defp select_scenarios(scenarios, names), do: filter_scenarios(scenarios, names)
 
   defp env(key, default) do
     case System.get_env(key) do
@@ -172,6 +244,100 @@ defmodule Bench.Config do
     end
   end
 
+  defp env_float_optional(key) do
+    case System.get_env(key) do
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      value ->
+        case Float.parse(value) do
+          {float, _} when float > 0 -> float
+          _ -> nil
+        end
+    end
+  end
+
+  defp env_int_optional(key) do
+    case System.get_env(key) do
+      nil ->
+        nil
+
+      "" ->
+        nil
+
+      value ->
+        case Integer.parse(value) do
+          {int, _} when int > 0 -> int
+          _ -> nil
+        end
+    end
+  end
+
+  defp env_list_int(key, default) do
+    case System.get_env(key) do
+      nil ->
+        default
+
+      "" ->
+        default
+
+      value ->
+        values =
+          value
+          |> String.split(",", trim: true)
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&parse_int/1)
+          |> Enum.filter(&(&1 > 0))
+          |> uniq_preserve_order()
+
+        if values == [], do: default, else: values
+    end
+  end
+
+  defp parse_int(value) do
+    case Integer.parse(value) do
+      {int, _} -> int
+      :error -> 0
+    end
+  end
+
+  defp uniq_preserve_order(list) do
+    Enum.reduce(list, [], fn item, acc ->
+      if item in acc, do: acc, else: acc ++ [item]
+    end)
+  end
+
+  defp default_preflight_concurrencies(config, overrides) do
+    if overrides != [] do
+      overrides
+    else
+      base = max(config.preflight_concurrency, 1)
+      candidates = [base, base * 2, base * 4, base * 8]
+
+      candidates =
+        case config.max_concurrency do
+          max_concurrency when is_integer(max_concurrency) and max_concurrency > 0 ->
+            capped = Enum.filter(candidates, &(&1 <= max_concurrency))
+
+            if max_concurrency in capped do
+              capped
+            else
+              capped ++ [max_concurrency]
+            end
+
+          _ ->
+            candidates
+        end
+
+      candidates
+      |> uniq_preserve_order()
+      |> Enum.sort()
+    end
+  end
+
   defp env_list(key) do
     case System.get_env(key) do
       nil ->
@@ -195,6 +361,44 @@ defmodule Bench.Config do
     end
   end
 
+  defp env_latency_map(key) do
+    case System.get_env(key) do
+      nil ->
+        %{}
+
+      "" ->
+        %{}
+
+      value ->
+        value
+        |> String.split(",", trim: true)
+        |> Enum.reduce(%{}, fn entry, acc ->
+          case String.split(entry, ":", parts: 2) do
+            [name, latency_raw] ->
+              latency = parse_latency(latency_raw)
+
+              if latency > 0 do
+                Map.put(acc, String.trim(name), latency)
+              else
+                acc
+              end
+
+            _ ->
+              acc
+          end
+        end)
+    end
+  end
+
+  defp parse_latency(value) do
+    value = String.trim(value)
+
+    case Float.parse(value) do
+      {latency, _} -> latency
+      :error -> 0.0
+    end
+  end
+
   defp normalize_http_version(value) do
     case String.downcase(value) do
       "h2" -> "http2"
@@ -211,24 +415,13 @@ defmodule Bench.Config do
     Path.expand("../results/#{timestamp}", File.cwd!())
   end
 
-  defp json_payload(target_bytes) when is_integer(target_bytes) and target_bytes > 0 do
-    prefix = "{\"payload\":\""
-    suffix = "\"}"
-    overhead = byte_size(prefix) + byte_size(suffix)
-    payload_size = max(target_bytes - overhead, 0)
-    prefix <> String.duplicate("a", payload_size) <> suffix
-  end
+  defp echo_payload(size) do
+    case Map.fetch(@echo_payloads, size) do
+      {:ok, payload} ->
+        payload
 
-  defp default_pool_count do
-    case :erlang.system_info(:logical_processors_available) do
-      count when is_integer(count) and count > 0 ->
-        count
-
-      _ ->
-        case :erlang.system_info(:schedulers_online) do
-          count when is_integer(count) and count > 0 -> count
-          _ -> System.schedulers_online()
-        end
+      :error ->
+        raise "Unsupported BENCH_ECHO_BYTES=#{size}. Add a static payload under infra/server/static."
     end
   end
 end

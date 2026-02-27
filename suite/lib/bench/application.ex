@@ -8,8 +8,7 @@ defmodule Bench.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      # Starts a worker by calling: Bench.Worker.start_link(arg)
-      # {Bench.Worker, arg}
+      {DynamicSupervisor, name: Bench.FinchSupervisor, strategy: :one_for_one}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

@@ -7,7 +7,7 @@ defmodule Bench.ResultWriter do
   def write(results, config) do
     File.mkdir_p!(config.result_dir)
 
-    summary = Enum.map(results, &summary_row/1)
+    summary = Enum.map(results, &summary_row(&1, config))
     metadata = metadata(config)
 
     File.write!(Path.join(config.result_dir, "summary.csv"), summary_csv(summary))
@@ -17,10 +17,12 @@ defmodule Bench.ResultWriter do
     :ok
   end
 
-  defp summary_row(%Result{} = result) do
+  defp summary_row(%Result{} = result, config) do
     %{
       client: result.client,
       scenario: result.scenario,
+      pool_size: config.pool_size,
+      pool_count: summary_pool_count(result, config),
       requests: result.requests,
       errors: result.errors,
       duration_seconds: result.duration_s,
@@ -49,11 +51,21 @@ defmodule Bench.ResultWriter do
         scenarios: Enum.map(config.scenarios, & &1.name),
         pool_size: config.pool_size,
         pool_count: config.pool_count,
+        finch_effective_pool_count: finch_effective_pool_count(config),
         gun_conns: config.gun_conns,
+        pool_timeout_ms: config.pool_timeout_ms,
         request_timeout_ms: config.request_timeout_ms,
         tls_verify: config.tls_verify,
         ddskerl_error: config.ddskerl_error,
-        ddskerl_bound: config.ddskerl_bound
+        ddskerl_bound: config.ddskerl_bound,
+        target_rps: config.target_rps,
+        scenario_latency_ms: config.scenario_latency_ms,
+        dynamic_concurrency: config.dynamic_concurrency,
+        preflight_s: config.preflight_s,
+        preflight_warmup_s: config.preflight_warmup_s,
+        preflight_concurrency: config.preflight_concurrency,
+        preflight_concurrencies: config.preflight_concurrencies,
+        max_concurrency: config.max_concurrency
       },
       finch: %{
         source: System.get_env("BENCH_FINCH_SOURCE") || "git",
@@ -85,6 +97,8 @@ defmodule Bench.ResultWriter do
     header = [
       "client",
       "scenario",
+      "pool_size",
+      "pool_count",
       "requests",
       "errors",
       "duration_seconds",
@@ -106,6 +120,8 @@ defmodule Bench.ResultWriter do
     [
       row.client,
       row.scenario,
+      row.pool_size,
+      row.pool_count,
       row.requests,
       row.errors,
       row.duration_seconds,
@@ -119,6 +135,19 @@ defmodule Bench.ResultWriter do
     ]
     |> Enum.map(&format_field/1)
   end
+
+  defp summary_pool_count(%Result{client: :finch}, config), do: finch_effective_pool_count(config)
+  defp summary_pool_count(_result, config), do: config.pool_count
+
+  defp finch_effective_pool_count(%{
+         http_version: "http2",
+         pool_size: pool_size,
+         pool_count: pool_count
+       }) do
+    max(pool_count, pool_size)
+  end
+
+  defp finch_effective_pool_count(%{pool_count: pool_count}), do: pool_count
 
   defp to_ms(nil), do: nil
   defp to_ms(value), do: value / 1000
@@ -166,7 +195,9 @@ defmodule Bench.ResultWriter do
   defp format_field(value) when is_float(value),
     do: :io_lib.format("~.4f", [value]) |> IO.iodata_to_binary()
 
-  defp format_field(value), do: to_string(value)
+  defp format_field(value) when is_boolean(value), do: if(value, do: "true", else: "false")
+  defp format_field(value) when is_struct(value), do: inspect(value)
+  defp format_field(value), do: inspect(value)
 
   defp errors_csv(results) do
     header = ["client", "scenario", "reason", "count"]
@@ -175,7 +206,12 @@ defmodule Bench.ResultWriter do
       results
       |> Enum.flat_map(fn result ->
         Enum.map(result.error_reasons, fn {reason, count} ->
-          [format_field(result.client), format_field(result.scenario), format_field(reason), count]
+          [
+            format_field(result.client),
+            format_field(result.scenario),
+            format_field(reason),
+            count
+          ]
         end)
       end)
 

@@ -69,6 +69,10 @@ After this change, a developer can run three commands from the repository root t
   Rationale: Prevent OS limits from capping the benchmark workload on high concurrency runs.
   Date/Author: 2026-01-26 / Codex
 
+- Decision: For HTTP/2, consider multi-inflight per worker (async) if you want to stress stream multiplexing instead of wait-time.
+  Rationale: Delay-bound scenarios otherwise cap throughput based on per-request wait time and fixed concurrency.
+  Date/Author: 2026-01-28 / Codex
+
 ## Outcomes & Retrospective
 
 Implemented the Terraform module, OpenResty server configuration, benchmark suite (clients, runner, metrics, and result writer), automation scripts, and documentation/tests required to run the benchmarks end-to-end. The system has not yet been validated against live AWS infrastructure; the next step is to run `./bin/infra-up`, `./bin/bench-run`, and `./bin/infra-down` to confirm behavior and capture runtime evidence. (2026-01-26 / Codex)

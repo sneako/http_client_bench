@@ -1,0 +1,16 @@
+client,scenario,reason,count
+hackney,delay,checkout_failure,34
+hackney,delay,checkout_timeout,122
+hackney,delay_var,checkout_timeout,342
+hackney,delay_post,checkout_failure,2
+hackney,delay_post,checkout_timeout,360
+gun,health,closing,128891
+gun,small,closing,94640
+gun,medium,closing,9976
+gun,large,closing,1271
+gun,json,closing,13587
+gun,echo,closing,107246
+gun,stream,closing,1263
+gun,delay,closing,24
+gun,delay_var,closing,53
+gun,delay_post,closing,7

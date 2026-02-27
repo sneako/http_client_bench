@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+HOSTS_FILE="$ROOT_DIR/infra/hosts.json"
+
+if [[ ! -f "$HOSTS_FILE" ]]; then
+  echo "Hosts file not found: $HOSTS_FILE" >&2
+  echo "Run ./bin/infra-up first." >&2
+  exit 1
+fi
+
+CLIENT_IP=$(jq -r '.client_public_ip' "$HOSTS_FILE")
+SERVER_IP=$(jq -r '.server_public_ip' "$HOSTS_FILE")
+SERVER_PRIVATE_IP=$(jq -r '.server_private_ip' "$HOSTS_FILE")
+SSH_USER=$(jq -r '.ssh_user' "$HOSTS_FILE")
+SSH_KEY_PATH=$(jq -r '.ssh_key_path' "$HOSTS_FILE")
+BENCH_PORT=$(jq -r '.bench_port' "$HOSTS_FILE")
+BENCH_TLS_PORT=$(jq -r '.bench_tls_port // empty' "$HOSTS_FILE")
+
+if [[ -z "$CLIENT_IP" || -z "$SERVER_IP" || -z "$SSH_USER" || -z "$SSH_KEY_PATH" ]]; then
+  echo "Hosts file missing required fields." >&2
+  exit 1
+fi
+
+HTTP_VERSION=$(echo "${BENCH_HTTP_VERSION:-http1}" | tr '[:upper:]' '[:lower:]')
+if [[ "$HTTP_VERSION" == "h2" ]]; then
+  HTTP_VERSION="http2"
+fi
+
+SCHEME="${BENCH_SCHEME:-}"
+if [[ -z "$SCHEME" ]]; then
+  if [[ "$HTTP_VERSION" == "http2" ]]; then
+    SCHEME="https"
+  else
+    SCHEME="http"
+  fi
+fi
+
+if [[ "$SCHEME" == "https" ]]; then
+  if [[ -z "$BENCH_TLS_PORT" ]]; then
+    BENCH_TLS_PORT=8443
+  fi
+  BENCH_EFFECTIVE_PORT="$BENCH_TLS_PORT"
+else
+  BENCH_EFFECTIVE_PORT="$BENCH_PORT"
+fi
+
+CURL_INSECURE=""
+if [[ "$SCHEME" == "https" ]]; then
+  CURL_INSECURE="-k"
+fi
+
+SSH_OPTS=(
+  -i "$SSH_KEY_PATH"
+  -o StrictHostKeyChecking=no
+  -o UserKnownHostsFile=/dev/null
+)
+RSYNC_SSH_OPTS=(-e "ssh ${SSH_OPTS[*]}")
+
+REMOTE_DIR="/home/${SSH_USER}/finch-bench"
+TS=$(date -u +"%Y-%m-%dT%H%M%SZ")
+LOCAL_RESULTS_DIR="$ROOT_DIR/results/$TS"
+LOCAL_RUST_RESULTS_DIR="$LOCAL_RESULTS_DIR/rust"
+REMOTE_RESULTS_DIR="$REMOTE_DIR/results/$TS/rust"
+
+mkdir -p "$LOCAL_RUST_RESULTS_DIR"
+
+RSYNC_FILTERS=(
+  --exclude .git
+  --exclude results
+  --exclude suite/_build
+  --exclude suite/deps
+  --exclude suite/tmp
+  --exclude infra/terraform/.terraform
+  --filter=':- .gitignore'
+)
+
+rsync -az --delete "${RSYNC_FILTERS[@]}" "${RSYNC_SSH_OPTS[@]}" "$ROOT_DIR/" "${SSH_USER}@${CLIENT_IP}:${REMOTE_DIR}/"
+rsync -az --delete "${RSYNC_FILTERS[@]}" "${RSYNC_SSH_OPTS[@]}" "$ROOT_DIR/" "${SSH_USER}@${SERVER_IP}:${REMOTE_DIR}/"
+
+cleanup() {
+  ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+    "openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf -s stop" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" <<EOSH
+set -euo pipefail
+REMOTE_DIR="$REMOTE_DIR"
+ulimit -n 1048576 || true
+mkdir -p /tmp/bench-server/html/static
+mkdir -p /tmp/bench-server/certs
+mkdir -p /tmp/bench-server/logs
+cp -a "$REMOTE_DIR/infra/server/static/." /tmp/bench-server/html/static/
+cp -a "$REMOTE_DIR/infra/server/certs/." /tmp/bench-server/certs/
+cp "$REMOTE_DIR/infra/server/openresty.conf" /tmp/bench-server/openresty.conf
+pkill -f openresty || true
+openresty -p /tmp/bench-server -c /tmp/bench-server/openresty.conf
+EOSH
+
+for _ in {1..30}; do
+  if ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
+    "curl -sSf ${CURL_INSECURE} ${SCHEME}://${SERVER_PRIVATE_IP}:${BENCH_EFFECTIVE_PORT}/health" >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" <<EOSH
+set -euo pipefail
+export PATH="\$HOME/.cargo/bin:\$PATH"
+ulimit -n 1048576 || true
+cd "$REMOTE_DIR/rust"
+if ! command -v pkg-config >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install -y pkg-config libssl-dev
+fi
+if ! command -v cargo >/dev/null 2>&1; then
+  curl -fsSL https://sh.rustup.rs | sh -s -- -y
+  export PATH="\$HOME/.cargo/bin:\$PATH"
+fi
+mkdir -p "${REMOTE_RESULTS_DIR}"
+export BENCH_RESULTS_DIR="${REMOTE_RESULTS_DIR}"
+cargo build --release
+BENCH_SERVER_HOST=${SERVER_PRIVATE_IP} \\
+BENCH_SERVER_PORT=${BENCH_EFFECTIVE_PORT} \\
+BENCH_SCHEME=${SCHEME} \\
+BENCH_HTTP_VERSION=${HTTP_VERSION} \\
+${BENCH_SCENARIOS:+BENCH_SCENARIOS=${BENCH_SCENARIOS}} \\
+${BENCH_DURATION:+BENCH_DURATION=${BENCH_DURATION}} \\
+${BENCH_WARMUP:+BENCH_WARMUP=${BENCH_WARMUP}} \\
+${BENCH_CONCURRENCY:+BENCH_CONCURRENCY=${BENCH_CONCURRENCY}} \\
+${BENCH_REQUEST_TIMEOUT_MS:+BENCH_REQUEST_TIMEOUT_MS=${BENCH_REQUEST_TIMEOUT_MS}} \\
+${BENCH_TLS_VERIFY:+BENCH_TLS_VERIFY=${BENCH_TLS_VERIFY}} \\
+${BENCH_ECHO_BYTES:+BENCH_ECHO_BYTES=${BENCH_ECHO_BYTES}} \\
+${BENCH_DELAY_MS:+BENCH_DELAY_MS=${BENCH_DELAY_MS}} \\
+${BENCH_RUST_CLIENTS:+BENCH_RUST_CLIENTS=${BENCH_RUST_CLIENTS}} \\
+${BENCH_REQWEST_POOL_MAX_IDLE_PER_HOST:+BENCH_REQWEST_POOL_MAX_IDLE_PER_HOST=${BENCH_REQWEST_POOL_MAX_IDLE_PER_HOST}} \\
+${BENCH_REQWEST_CONNECT_TIMEOUT_MS:+BENCH_REQWEST_CONNECT_TIMEOUT_MS=${BENCH_REQWEST_CONNECT_TIMEOUT_MS}} \\
+${BENCH_REQWEST_TCP_NODELAY:+BENCH_REQWEST_TCP_NODELAY=${BENCH_REQWEST_TCP_NODELAY}} \\
+${BENCH_REQWEST_HTTP2_ADAPTIVE_WINDOW:+BENCH_REQWEST_HTTP2_ADAPTIVE_WINDOW=${BENCH_REQWEST_HTTP2_ADAPTIVE_WINDOW}} \\
+./target/release/bench_rust
+EOSH
+
+rsync -az "${RSYNC_SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}:${REMOTE_RESULTS_DIR}/" "$LOCAL_RUST_RESULTS_DIR/"
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${CLIENT_IP}" \
+  "uname -a; lscpu; free -m" > "$LOCAL_RESULTS_DIR/system_client.txt" || true
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+  "uname -a; lscpu; free -m" > "$LOCAL_RESULTS_DIR/system_server.txt" || true
+
+ssh "${SSH_OPTS[@]}" "${SSH_USER}@${SERVER_IP}" \
+  "cat /tmp/bench-server/logs/error.log" > "$LOCAL_RESULTS_DIR/server.log" || true
+
+echo "Rust benchmark results stored in $LOCAL_RUST_RESULTS_DIR"

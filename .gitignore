@@ -1,3 +1,5 @@
 # Editor artifacts.
 **/*/.expert
 **/*/.elixir_ls
+
+results/*

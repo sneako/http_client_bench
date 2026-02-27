@@ -23,6 +23,8 @@ defmodule Bench.MixProject do
       finch_dep(),
       {:hackney, "~> 2.0"},
       {:gun, "~> 2.1"},
+      {:buoy, git: "https://github.com/lpgauth/buoy.git", branch: "master"},
+      {:metal, git: "https://github.com/lpgauth/metal.git", tag: "0.1.1", override: true},
       {:jason, "~> 1.4"},
       {:ddskerl, "~> 0.2"},
       {:nimble_csv, "~> 1.2"}
